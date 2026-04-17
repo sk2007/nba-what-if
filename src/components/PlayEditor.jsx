@@ -83,6 +83,9 @@ export default function PlayEditor() {
 
   return (
     <div>
+      <p style={{ fontSize: '13px', color: '#666', marginBottom: '16px' }}>
+        Lakers vs. Celtics — Game 7 (Hardcoded Scenario) · Lakers Win Probability
+      </p>
       <div style={styles.chartsRow}>
         <WinProbChart data={originalCurve} title="Original" color="#2563eb" />
         <WinProbChart data={whatIfCurve} title="What If Scenario" color="#dc2626" />
