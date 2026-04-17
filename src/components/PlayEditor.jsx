@@ -195,9 +195,10 @@ function ShotBrowser({ shots, overrides, onOverride }) {
   const [quarterFilter, setQuarterFilter] = useState('all');
   const quarters = [...new Set(shots.map((s) => s.quarter))].sort((a, b) => a - b);
 
-  const filtered = quarterFilter === 'all'
+  const filtered = (quarterFilter === 'all'
     ? shots
-    : shots.filter((s) => s.quarter === Number(quarterFilter));
+    : shots.filter((s) => s.quarter === Number(quarterFilter))
+  ).slice().sort((a, b) => b.quarter !== a.quarter ? b.quarter - a.quarter : b.i - a.i);
 
   return (
     <div>
