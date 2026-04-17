@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import TabNav from './components/TabNav';
 import PlayEditor from './components/PlayEditor';
+import StatModel from './components/StatModel';
 import './App.css';
 
 export default function App() {
@@ -15,7 +16,7 @@ export default function App() {
       <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
       <div>
         {activeTab === 'Play Editor' && <PlayEditor />}
-        {activeTab === 'Stat Model' && <p>Stat Model coming soon</p>}
+        {activeTab === 'Stat Model' && <StatModel />}
       </div>
     </div>
   );
