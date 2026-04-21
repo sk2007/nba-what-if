@@ -4,6 +4,7 @@ from nba_api.stats.endpoints import (
     BoxScoreTraditionalV2,
 )
 from nba_api.stats.static import teams as nba_teams
+import pandas as pd
 
 _cache = {}
 
@@ -108,6 +109,8 @@ def _fetch_play_by_play(game_id):
     score_b = 0
 
     for _, row in df.iterrows():
+        if pd.isna(row["PERIOD"]) or pd.isna(row["EVENTMSGTYPE"]):
+            continue
         quarter = int(row["PERIOD"])
         clock_str = str(row["PCTIMESTRING"]) if row["PCTIMESTRING"] else "0:00"
 
@@ -232,11 +235,11 @@ def _fetch_team_game_log(season, season_type):
     for _, row in df.iterrows():
         rows.append({
             "WL": str(row.get("WL", "")),
-            "FG_PCT": float(row["FG_PCT"]) if row["FG_PCT"] else 0.0,
-            "FG3_PCT": float(row["FG3_PCT"]) if row["FG3_PCT"] else 0.0,
-            "FT_PCT": float(row["FT_PCT"]) if row["FT_PCT"] else 0.0,
-            "REB": int(row["REB"]) if row["REB"] else 0,
-            "TOV": int(row["TOV"]) if row["TOV"] else 0,
+            "FG_PCT": float(row["FG_PCT"]) if pd.notna(row["FG_PCT"]) else 0.0,
+            "FG3_PCT": float(row["FG3_PCT"]) if pd.notna(row["FG3_PCT"]) else 0.0,
+            "FT_PCT": float(row["FT_PCT"]) if pd.notna(row["FT_PCT"]) else 0.0,
+            "REB": int(row["REB"]) if pd.notna(row["REB"]) else 0,
+            "TOV": int(row["TOV"]) if pd.notna(row["TOV"]) else 0,
         })
     return rows
 
