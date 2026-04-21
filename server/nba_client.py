@@ -2,10 +2,8 @@ from nba_api.stats.endpoints import (
     LeagueGameFinder,
     PlayByPlayV2,
     BoxScoreTraditionalV2,
-    TeamGameLog,
 )
 from nba_api.stats.static import teams as nba_teams
-import time
 
 _cache = {}
 
@@ -80,13 +78,30 @@ def _fetch_play_by_play(game_id):
     pbp = PlayByPlayV2(game_id=game_id)
     df = pbp.get_data_frames()[0]
 
-    # Determine teamA/teamB from box score (home = teamA)
+    # Determine teamA (home) / teamB (away).
+    # Use play-by-play HOMEDESCRIPTION column: a play with HOMEDESCRIPTION set
+    # and a PLAYER1_TEAM_NICKNAME identifies the home team by nickname.
     box = BoxScoreTraditionalV2(game_id=game_id)
-    team_df = box.get_data_frames()[1]  # team stats frame
+    team_df = box.get_data_frames()[1]  # team stats summary frame
     team_names = team_df["TEAM_NAME"].tolist()
-    # Home team is listed second in BoxScoreTraditionalV2 team frame
-    team_a = team_names[1] if len(team_names) >= 2 else team_names[0]
-    team_b = team_names[0] if len(team_names) >= 2 else ""
+
+    home_nickname = None
+    for _, row in df.iterrows():
+        if row.get("HOMEDESCRIPTION") and row.get("PLAYER1_TEAM_NICKNAME"):
+            home_nickname = str(row["PLAYER1_TEAM_NICKNAME"])
+            break
+
+    if home_nickname and len(team_names) >= 2:
+        if team_names[0].endswith(home_nickname):
+            team_a, team_b = team_names[0], team_names[1]
+        else:
+            team_a, team_b = team_names[1], team_names[0]
+    elif len(team_names) >= 2:
+        # Fallback: BoxScoreTraditionalV2 visitor=index 0, home=index 1
+        team_a, team_b = team_names[1], team_names[0]
+    else:
+        team_a = team_names[0] if team_names else ""
+        team_b = ""
 
     plays = []
     score_a = 0
@@ -100,18 +115,25 @@ def _fetch_play_by_play(game_id):
         parts = clock_str.split(":")
         clock_seconds = int(parts[0]) * 60 + int(parts[1]) if len(parts) == 2 else 0
 
-        # Compute gameSeconds elapsed from tip-off
-        quarter_start = (min(quarter, 5) - 1) * (5 * 60 if quarter > 4 else 12 * 60)
-        quarter_duration = 5 * 60 if quarter > 4 else 12 * 60
+        # Compute gameSeconds elapsed from tip-off.
+        # Regulation: Q1-Q4 each 12 min (720s). OT periods each 5 min (300s).
+        # quarter_start for OT: 2880 + (quarter - 5) * 300
+        if quarter <= 4:
+            quarter_start = (quarter - 1) * 720
+            quarter_duration = 720
+        else:
+            quarter_start = 2880 + (quarter - 5) * 300
+            quarter_duration = 300
         game_seconds = quarter_start + (quarter_duration - clock_seconds)
 
-        # Parse score from SCORE column (e.g. "2 - 0")
+        # Parse score from SCORE column. NBA PlayByPlayV2 format: "VISITOR - HOME"
+        # so parts_score[0] = away (teamB), parts_score[1] = home (teamA).
         score_str = str(row.get("SCORE", "")) or ""
         if " - " in score_str:
             parts_score = score_str.split(" - ")
             try:
-                score_a = int(parts_score[0])
-                score_b = int(parts_score[1])
+                score_b = int(parts_score[0])  # visitor = teamB
+                score_a = int(parts_score[1])  # home = teamA
             except ValueError:
                 pass
 
@@ -162,7 +184,7 @@ def _classify_event(event_type_id, description):
     desc_lower = description.lower()
     if event_type_id in (1, 2):
         editable = True
-        if "3pt" in desc_lower or "3-pt" in desc_lower or "three" in desc_lower:
+        if "3pt" in desc_lower or "3-pt" in desc_lower:
             pts = 3
         elif event_type_id == 1:
             pts = 2
