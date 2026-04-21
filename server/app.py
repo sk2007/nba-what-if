@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import pandas as pd
 from server.nba_client import get_games, get_play_by_play, get_win_prob_stats
 
 app = Flask(__name__)
@@ -47,19 +48,33 @@ def boxscore(game_id):
         rows = team_df.to_dict(orient="records")
         if len(rows) < 2:
             return jsonify({"error": "Could not parse box score"}), 503
+
         def extract(row):
             return {
                 "teamName": row["TEAM_NAME"],
-                "FG_PCT": round(float(row["FG_PCT"] or 0), 3),
-                "FG3_PCT": round(float(row["FG3_PCT"] or 0), 3),
-                "FT_PCT": round(float(row["FT_PCT"] or 0), 3),
-                "REB": int(row["REB"] or 0),
-                "TOV": int(row["TOV"] or 0),
+                "FG_PCT": round(float(row["FG_PCT"]) if pd.notna(row["FG_PCT"]) else 0.0, 3),
+                "FG3_PCT": round(float(row["FG3_PCT"]) if pd.notna(row["FG3_PCT"]) else 0.0, 3),
+                "FT_PCT": round(float(row["FT_PCT"]) if pd.notna(row["FT_PCT"]) else 0.0, 3),
+                "REB": int(row["REB"]) if pd.notna(row["REB"]) else 0,
+                "TOV": int(row["TOV"]) if pd.notna(row["TOV"]) else 0,
             }
+
+        # Use get_play_by_play (cached) to resolve home/away team names consistently.
+        pbp = get_play_by_play(game_id)
+        team_a_name = pbp["teamA"]
+        team_b_name = pbp["teamB"]
+        row_map = {r["TEAM_NAME"]: r for r in rows}
+        if team_a_name not in row_map or team_b_name not in row_map:
+            # Fallback: visitor=index 0, home=index 1
+            return jsonify({
+                "gameId": game_id,
+                "teamA": extract(rows[1]),
+                "teamB": extract(rows[0]),
+            })
         return jsonify({
             "gameId": game_id,
-            "teamA": extract(rows[1]),
-            "teamB": extract(rows[0]),
+            "teamA": extract(row_map[team_a_name]),
+            "teamB": extract(row_map[team_b_name]),
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 503
