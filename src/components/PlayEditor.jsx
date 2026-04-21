@@ -9,9 +9,8 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
-import { fetchIndex, fetchGame, recomputeWpCurve } from '../data/gameData';
+import { fetchGames, fetchPlayByPlay, recomputeWpCurve } from '../api/nbaApi';
 
-const YEARS = [2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015];
 
 function WinProbChart({ data, title, color, teamA }) {
   return (
@@ -50,95 +49,87 @@ function WinProbChart({ data, title, color, teamA }) {
   );
 }
 
-export default function PlayEditor() {
-  const [index, setIndex] = useState(null);
-  const [year, setYear] = useState(2024);
+export default function PlayEditor({ season, seasonType }) {
+  const [games, setGames] = useState([]);
   const [gameId, setGameId] = useState(null);
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(false);
   const [overrides, setOverrides] = useState({});
 
-  // Load index on mount
+  // Load games when season/seasonType change
   useEffect(() => {
-    fetchIndex().then((idx) => {
-      setIndex(idx);
-      // Default to first game of default year
-      const first = idx[2024]?.[0];
-      if (first) setGameId(first.gameId);
+    if (!season || !seasonType) return;
+    setLoading(true);
+    setGame(null);
+    setGameId(null);
+    setOverrides({});
+    fetchGames(season, seasonType).then((data) => {
+      setGames(data.games || []);
+      if (data.games && data.games.length > 0) {
+        setGameId(data.games[0].gameId);
+      }
+      setLoading(false);
     });
-  }, []);
+  }, [season, seasonType]);
 
-  // Load game data when year or gameId changes
+  // Load game data when gameId changes
   useEffect(() => {
     if (!gameId) return;
     setLoading(true);
     setOverrides({});
-    fetchGame(year, gameId).then((g) => {
-      setGame(g);
+    fetchPlayByPlay(gameId).then((pbpData) => {
+      setGame(pbpData);
       setLoading(false);
     });
-  }, [year, gameId]);
-
-  const handleYearChange = useCallback((e) => {
-    const y = Number(e.target.value);
-    setYear(y);
-    setGame(null);
-    setGameId(null);
-    // Pick first game of new year from index
-    fetchIndex().then((idx) => {
-      const first = idx[y]?.[0];
-      if (first) setGameId(first.gameId);
-    });
-  }, []);
+  }, [gameId]);
 
   const handleGameChange = useCallback((e) => {
     setGameId(e.target.value);
   }, []);
 
-  const handleOverride = useCallback((shotIdx, result) => {
+  const handleOverride = useCallback((eventNum, result) => {
     setOverrides((prev) => {
       const next = { ...prev };
       // If reverting to original, remove the override
-      if (game && game.shots[shotIdx]?.result === result) {
-        delete next[shotIdx];
+      const play = game?.plays.find((p) => p.eventNum === eventNum);
+      if (play) {
+        const originalResult = play.shotPts > 0 ? 'Made' : 'Missed';
+        if (originalResult === result) {
+          delete next[eventNum];
+        } else {
+          next[eventNum] = result;
+        }
       } else {
-        next[shotIdx] = result;
+        next[eventNum] = result;
       }
       return next;
     });
   }, [game]);
 
-  const whatIfCurve = game ? recomputeWpCurve(game.shots, overrides) : [];
+  const whatIfCurve = game ? recomputeWpCurve(game.plays, overrides, game.teamA) : [];
   const hasOverrides = Object.keys(overrides).length > 0;
 
-  // For the play list, show shots that were overridden + nearby context
-  // When no overrides, show the last 10 shots of the game as a sample
-  const displayShots = game
-    ? hasOverrides
-      ? game.shots.filter((s) => overrides[s.i] !== undefined)
-      : game.shots.slice(-10)
+  // For the play list, show editable plays (shots/free throws)
+  const editablePlays = game
+    ? game.plays.filter((p) => p.editable)
     : [];
 
-  const gameList = index ? (index[year] || []) : [];
+  // Show plays that were overridden, or last 10 editable plays if no overrides
+  const displayPlays = hasOverrides
+    ? editablePlays.filter((p) => overrides[p.eventNum] !== undefined)
+    : editablePlays.slice(-10);
 
   return (
     <div>
       {/* Game selector */}
       <div style={styles.selectorRow}>
         <div style={styles.selectorGroup}>
-          <label style={styles.label}>Season</label>
-          <select value={year} onChange={handleYearChange} style={styles.select}>
-            {YEARS.map((y) => (
-              <option key={y} value={y}>{y} Playoffs</option>
-            ))}
-          </select>
-        </div>
-        <div style={styles.selectorGroup}>
           <label style={styles.label}>Game</label>
-          <select value={gameId || ''} onChange={handleGameChange} style={styles.selectWide} disabled={!index}>
-            {gameList.map((g) => (
+          <select value={gameId || ''} onChange={handleGameChange} style={styles.selectWide} disabled={games.length === 0 || loading}>
+            {loading && <option>Loading games…</option>}
+            {games.map((g) => (
               <option key={g.gameId} value={g.gameId}>
-                {g.teamA} vs {g.teamB} ({g.finalScoreA}–{g.finalScoreB})
+                {g.teamA} vs {g.teamB} — {g.date} ({g.finalScoreA}–{g.finalScoreB})
               </option>
             ))}
           </select>
@@ -155,7 +146,7 @@ export default function PlayEditor() {
       {game && !loading && (
         <>
           <p style={styles.subtitle}>
-            {game.teamA} Win Probability · {game.teamA} {game.finalScoreA} – {game.finalScoreB} {game.teamB} · Shot-by-shot
+            {game.teamA} Win Probability · {game.plays.length} plays analyzed
           </p>
           <div style={styles.chartsRow}>
             <WinProbChart
@@ -175,15 +166,15 @@ export default function PlayEditor() {
           <div style={styles.playList}>
             <div style={styles.playListHeader}>
               <h3 style={styles.playListTitle}>
-                {hasOverrides ? 'Edited shots' : 'Last 10 shots of game (flip any outcome to see what-if)'}
+                {hasOverrides ? 'Edited plays' : 'Last 10 shots of game (flip any outcome to see what-if)'}
               </h3>
               <span style={styles.playListHint}>
-                {game.shots.length} total shots in this game
+                {editablePlays.length} total shots/free throws in this game
               </span>
             </div>
 
-            {/* Shot browser: show all shots grouped by quarter */}
-            <ShotBrowser shots={game.shots} overrides={overrides} onOverride={handleOverride} />
+            {/* Play browser: show editable plays grouped by quarter */}
+            <PlayBrowser plays={editablePlays} overrides={overrides} onOverride={handleOverride} />
           </div>
         </>
       )}
@@ -191,14 +182,14 @@ export default function PlayEditor() {
   );
 }
 
-function ShotBrowser({ shots, overrides, onOverride }) {
+function PlayBrowser({ plays, overrides, onOverride }) {
   const [quarterFilter, setQuarterFilter] = useState('all');
-  const quarters = [...new Set(shots.map((s) => s.quarter))].sort((a, b) => a - b);
+  const quarters = [...new Set(plays.map((p) => p.quarter))].sort((a, b) => a - b);
 
   const filtered = (quarterFilter === 'all'
-    ? shots
-    : shots.filter((s) => s.quarter === Number(quarterFilter))
-  ).slice().sort((a, b) => b.quarter !== a.quarter ? b.quarter - a.quarter : b.i - a.i);
+    ? plays
+    : plays.filter((p) => p.quarter === Number(quarterFilter))
+  ).slice().sort((a, b) => b.quarter !== a.quarter ? b.quarter - a.quarter : b.eventNum - a.eventNum);
 
   return (
     <div>
@@ -220,45 +211,41 @@ function ShotBrowser({ shots, overrides, onOverride }) {
 
       <div style={styles.shotTable}>
         <div style={styles.shotTableHeader}>
-          <span style={{ width: 40 }}>#</span>
+          <span style={{ width: 50 }}>Event</span>
           <span style={{ width: 30 }}>Q</span>
-          <span style={{ flex: 1 }}>Player</span>
-          <span style={{ width: 120 }}>Type</span>
+          <span style={{ flex: 1 }}>Description</span>
           <span style={{ width: 100 }}>Outcome</span>
         </div>
-        {filtered.map((shot) => {
-          const currentResult = overrides[shot.i] !== undefined ? overrides[shot.i] : shot.result;
-          const isEdited = overrides[shot.i] !== undefined;
+        {filtered.map((play) => {
+          const isOverridden = overrides[play.eventNum] !== undefined;
+          const currentResult = isOverridden ? overrides[play.eventNum] : (play.shotPts > 0 ? 'Made' : 'Missed');
           return (
             <div
-              key={shot.i}
+              key={play.eventNum}
               style={{
                 ...styles.shotRow,
-                ...(isEdited ? styles.shotRowEdited : {}),
+                ...(isOverridden ? styles.shotRowEdited : {}),
               }}
             >
-              <span style={{ width: 40, color: '#999', fontSize: 11 }}>{shot.i + 1}</span>
-              <span style={{ width: 30, fontSize: 12 }}>Q{shot.quarter}</span>
+              <span style={{ width: 50, color: '#999', fontSize: 11 }}>{play.eventNum}</span>
+              <span style={{ width: 30, fontSize: 12 }}>Q{play.quarter}</span>
               <span style={{ flex: 1, fontSize: 13 }}>
-                <span style={{ fontSize: 11, color: '#888', marginRight: 4 }}>
-                  {shot.team.split(' ').pop()}
-                </span>
-                {shot.player}
-              </span>
-              <span style={{ width: 120, fontSize: 12, color: '#555' }}>
-                {shot.type === '3 Pt' ? '3-pointer' : shot.type === 'Over 10 ft 2 Pt' ? 'Mid-range' : 'Close 2pt'}
+                {play.player && <span style={{ fontSize: 11, color: '#888', marginRight: 4 }}>
+                  {play.player}
+                </span>}
+                {play.description.substring(0, 60)}
               </span>
               <span style={{ width: 100 }}>
                 <select
                   value={currentResult}
-                  onChange={(e) => onOverride(shot.i, e.target.value)}
+                  onChange={(e) => onOverride(play.eventNum, e.target.value)}
                   style={{
                     ...styles.outcomeSelect,
-                    ...(isEdited ? styles.outcomeSelectEdited : {}),
+                    ...(isOverridden ? styles.outcomeSelectEdited : {}),
                   }}
                 >
-                  <option value="Make">Make</option>
-                  <option value="Miss">Miss</option>
+                  <option value="Made">Made</option>
+                  <option value="Missed">Missed</option>
                 </select>
               </span>
             </div>

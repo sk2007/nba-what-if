@@ -56,9 +56,6 @@ export const sliderConfig = [
   },
 ];
 
-// Returns win probability 0-100 as an integer.
-// Each stat is normalized relative to its average (how far above/below average),
-// then weighted and summed. Result is clamped so defaults produce ~50%.
 export function calcWinProb(values) {
   let score = 0;
 
