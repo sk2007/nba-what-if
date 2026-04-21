@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { sliderConfig, calcWinProb, defaultValues } from '../data/statModel';
 
-export default function StatModel() {
+export default function StatModel({ season, seasonType }) {
   const [values, setValues] = useState(defaultValues());
 
   const winProb = calcWinProb(values);
