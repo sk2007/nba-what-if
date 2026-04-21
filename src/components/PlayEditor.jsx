@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ReferenceLine,
-  ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts';
-import { fetchGames, fetchPlayByPlay, recomputeWpCurve } from '../api/nbaApi';
+import { fetchPlayByPlay, recomputeWpCurve } from '../api/nbaApi';
+import GameSelector from './GameSelector';
 
+const QUARTER_BOUNDARIES = [
+  { seconds: 0, label: 'Q1' },
+  { seconds: 720, label: 'Q2' },
+  { seconds: 1440, label: 'Q3' },
+  { seconds: 2160, label: 'Q4' },
+];
 
 function WinProbChart({ data, title, color, teamA }) {
   return (
@@ -20,8 +21,15 @@ function WinProbChart({ data, title, color, teamA }) {
         <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
           <XAxis
-            dataKey="idx"
-            label={{ value: 'Shot #', position: 'insideBottom', offset: -8, fontSize: 12 }}
+            dataKey="gameSeconds"
+            type="number"
+            domain={[0, 'dataMax']}
+            label={{ value: 'Game Time (s)', position: 'insideBottom', offset: -8, fontSize: 12 }}
+            ticks={[0, 720, 1440, 2160, 2880]}
+            tickFormatter={(s) => {
+              const q = QUARTER_BOUNDARIES.slice().reverse().find((b) => s >= b.seconds);
+              return q ? q.label : '';
+            }}
             tick={{ fontSize: 11 }}
           />
           <YAxis
@@ -32,17 +40,23 @@ function WinProbChart({ data, title, color, teamA }) {
           />
           <Tooltip
             formatter={(v) => [`${v}%`, `${teamA} Win Prob`]}
-            labelFormatter={(l) => l === -1 ? 'Start' : `Shot #${l + 1}`}
+            labelFormatter={(s) => {
+              const min = Math.floor(s / 60);
+              const sec = s % 60;
+              return `${min}:${String(sec).padStart(2, '0')}`;
+            }}
           />
+          {QUARTER_BOUNDARIES.map((b) => (
+            <ReferenceLine
+              key={b.seconds}
+              x={b.seconds}
+              stroke="#ccc"
+              strokeDasharray="4 2"
+              label={{ value: b.label, position: 'top', fontSize: 10, fill: '#999' }}
+            />
+          ))}
           <ReferenceLine y={50} stroke="#ddd" strokeDasharray="4 2" />
-          <Line
-            type="monotone"
-            dataKey="wp"
-            stroke={color}
-            strokeWidth={2.5}
-            dot={false}
-            activeDot={{ r: 4 }}
-          />
+          <Line type="monotone" dataKey="wp" stroke={color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -50,55 +64,36 @@ function WinProbChart({ data, title, color, teamA }) {
 }
 
 export default function PlayEditor({ season, seasonType }) {
-  const [games, setGames] = useState([]);
   const [gameId, setGameId] = useState(null);
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [overrides, setOverrides] = useState({});
+  const [quarterFilter, setQuarterFilter] = useState('all');
 
-  // Load games when season/seasonType change
   useEffect(() => {
-    if (!season || !seasonType) return;
-    setLoading(true);
-    setGame(null);
     setGameId(null);
+    setGame(null);
     setOverrides({});
-    fetchGames(season, seasonType).then((data) => {
-      setGames(data.games || []);
-      if (data.games && data.games.length > 0) {
-        setGameId(data.games[0].gameId);
-      }
-      setLoading(false);
-    });
   }, [season, seasonType]);
 
-  // Load game data when gameId changes
   useEffect(() => {
     if (!gameId) return;
     setLoading(true);
+    setError(null);
     setOverrides({});
-    fetchPlayByPlay(gameId).then((pbpData) => {
-      setGame(pbpData);
-      setLoading(false);
-    });
+    fetchPlayByPlay(gameId)
+      .then((data) => { setGame(data); setLoading(false); })
+      .catch((e) => { setError(e.message); setLoading(false); });
   }, [gameId]);
-
-  const handleGameChange = useCallback((e) => {
-    setGameId(e.target.value);
-  }, []);
 
   const handleOverride = useCallback((eventNum, result) => {
     setOverrides((prev) => {
       const next = { ...prev };
-      // If reverting to original, remove the override
       const play = game?.plays.find((p) => p.eventNum === eventNum);
-      if (play) {
-        const originalResult = play.shotPts > 0 ? 'Made' : 'Missed';
-        if (originalResult === result) {
-          delete next[eventNum];
-        } else {
-          next[eventNum] = result;
-        }
+      const originalResult = play?.shotPts > 0 ? 'Made' : 'Missed';
+      if (result === originalResult) {
+        delete next[eventNum];
       } else {
         next[eventNum] = result;
       }
@@ -106,55 +101,42 @@ export default function PlayEditor({ season, seasonType }) {
     });
   }, [game]);
 
-  const whatIfCurve = game ? recomputeWpCurve(game.plays, overrides, game.teamA) : [];
   const hasOverrides = Object.keys(overrides).length > 0;
+  const totalSeconds = game ? Math.max(2880, ...(game.plays.map((p) => p.gameSeconds))) : 2880;
+  const whatIfCurve = game ? recomputeWpCurve(game.plays, overrides, game.teamA, totalSeconds) : [];
 
-  // For the play list, show editable plays (shots/free throws)
-  const editablePlays = game
-    ? game.plays.filter((p) => p.editable)
+  const quarters = game ? [...new Set(game.plays.map((p) => p.quarter))].sort((a, b) => a - b) : [];
+  const filteredPlays = game
+    ? (quarterFilter === 'all' ? game.plays : game.plays.filter((p) => p.quarter === Number(quarterFilter)))
+        .slice().sort((a, b) => b.gameSeconds - a.gameSeconds)
     : [];
-
-  // Show plays that were overridden, or last 10 editable plays if no overrides
-  const displayPlays = hasOverrides
-    ? editablePlays.filter((p) => overrides[p.eventNum] !== undefined)
-    : editablePlays.slice(-10);
 
   return (
     <div>
-      {/* Game selector */}
       <div style={styles.selectorRow}>
-        <div style={styles.selectorGroup}>
-          <label style={styles.label}>Game</label>
-          <select value={gameId || ''} onChange={handleGameChange} style={styles.selectWide} disabled={games.length === 0 || loading}>
-            {loading && <option>Loading games…</option>}
-            {games.map((g) => (
-              <option key={g.gameId} value={g.gameId}>
-                {g.teamA} vs {g.teamB} — {g.date} ({g.finalScoreA}–{g.finalScoreB})
-              </option>
-            ))}
-          </select>
-        </div>
+        <GameSelector
+          season={season}
+          seasonType={seasonType}
+          gameId={gameId}
+          onGameChange={setGameId}
+        />
         {hasOverrides && (
           <button onClick={() => setOverrides({})} style={styles.resetBtn}>
-            Reset edits
+            Reset edits ({Object.keys(overrides).length})
           </button>
         )}
       </div>
 
-      {loading && <p style={styles.loading}>Loading game data…</p>}
+      {loading && <p style={styles.status}>Loading play-by-play…</p>}
+      {error && <p style={styles.errorText}>Error: {error}</p>}
 
       {game && !loading && (
         <>
           <p style={styles.subtitle}>
-            {game.teamA} Win Probability · {game.plays.length} plays analyzed
+            {game.teamA} Win Probability · {game.teamA} {game.plays.at(-1)?.scoreA ?? '—'} – {game.plays.at(-1)?.scoreB ?? '—'} {game.teamB}
           </p>
           <div style={styles.chartsRow}>
-            <WinProbChart
-              data={game.wpCurve}
-              title="Original"
-              color="#2563eb"
-              teamA={game.teamA}
-            />
+            <WinProbChart data={game.wpCurve} title="Original" color="#2563eb" teamA={game.teamA} />
             <WinProbChart
               data={whatIfCurve}
               title={hasOverrides ? `What If (${Object.keys(overrides).length} edit${Object.keys(overrides).length > 1 ? 's' : ''})` : 'What If (no edits yet)'}
@@ -165,16 +147,54 @@ export default function PlayEditor({ season, seasonType }) {
 
           <div style={styles.playList}>
             <div style={styles.playListHeader}>
-              <h3 style={styles.playListTitle}>
-                {hasOverrides ? 'Edited plays' : 'Last 10 shots of game (flip any outcome to see what-if)'}
-              </h3>
-              <span style={styles.playListHint}>
-                {editablePlays.length} total shots/free throws in this game
-              </span>
+              <h3 style={styles.playListTitle}>Play-by-Play</h3>
+              <span style={styles.hint}>{game.plays.length} events · editable events have outcome dropdowns</span>
             </div>
 
-            {/* Play browser: show editable plays grouped by quarter */}
-            <PlayBrowser plays={editablePlays} overrides={overrides} onOverride={handleOverride} />
+            <div style={styles.filterRow}>
+              <label style={styles.filterLabel}>Quarter:</label>
+              {['all', ...quarters].map((q) => (
+                <button
+                  key={q}
+                  onClick={() => setQuarterFilter(String(q))}
+                  style={{ ...styles.filterBtn, ...(quarterFilter === String(q) ? styles.filterBtnActive : {}) }}
+                >
+                  {q === 'all' ? 'All' : `Q${q}`}
+                </button>
+              ))}
+            </div>
+
+            <div style={styles.table}>
+              <div style={styles.tableHeader}>
+                <span style={{ width: 80 }}>Time</span>
+                <span style={{ flex: 1 }}>Description</span>
+                <span style={{ width: 100 }}>Outcome</span>
+              </div>
+              {filteredPlays.map((play) => {
+                const isEdited = overrides[play.eventNum] !== undefined;
+                const currentResult = overrides[play.eventNum] ?? (play.shotPts > 0 ? 'Made' : 'Missed');
+                return (
+                  <div key={play.eventNum} style={{ ...styles.tableRow, ...(isEdited ? styles.tableRowEdited : {}) }}>
+                    <span style={styles.timeCell}>Q{play.quarter} {play.clock}</span>
+                    <span style={styles.descCell}>{play.description || '—'}</span>
+                    <span style={{ width: 100 }}>
+                      {play.editable ? (
+                        <select
+                          value={currentResult}
+                          onChange={(e) => handleOverride(play.eventNum, e.target.value)}
+                          style={{ ...styles.outcomeSelect, ...(isEdited ? styles.outcomeSelectEdited : {}) }}
+                        >
+                          <option value="Made">Made</option>
+                          <option value="Missed">Missed</option>
+                        </select>
+                      ) : (
+                        <span style={styles.nonEditable}>—</span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </>
       )}
@@ -182,237 +202,30 @@ export default function PlayEditor({ season, seasonType }) {
   );
 }
 
-function PlayBrowser({ plays, overrides, onOverride }) {
-  const [quarterFilter, setQuarterFilter] = useState('all');
-  const quarters = [...new Set(plays.map((p) => p.quarter))].sort((a, b) => a - b);
-
-  const filtered = (quarterFilter === 'all'
-    ? plays
-    : plays.filter((p) => p.quarter === Number(quarterFilter))
-  ).slice().sort((a, b) => b.quarter !== a.quarter ? b.quarter - a.quarter : b.eventNum - a.eventNum);
-
-  return (
-    <div>
-      <div style={styles.filterRow}>
-        <label style={styles.label}>Quarter:</label>
-        {['all', ...quarters].map((q) => (
-          <button
-            key={q}
-            onClick={() => setQuarterFilter(q)}
-            style={{
-              ...styles.filterBtn,
-              ...(quarterFilter === String(q) ? styles.filterBtnActive : {}),
-            }}
-          >
-            {q === 'all' ? 'All' : `Q${q}`}
-          </button>
-        ))}
-      </div>
-
-      <div style={styles.shotTable}>
-        <div style={styles.shotTableHeader}>
-          <span style={{ width: 50 }}>Event</span>
-          <span style={{ width: 30 }}>Q</span>
-          <span style={{ flex: 1 }}>Description</span>
-          <span style={{ width: 100 }}>Outcome</span>
-        </div>
-        {filtered.map((play) => {
-          const isOverridden = overrides[play.eventNum] !== undefined;
-          const currentResult = isOverridden ? overrides[play.eventNum] : (play.shotPts > 0 ? 'Made' : 'Missed');
-          return (
-            <div
-              key={play.eventNum}
-              style={{
-                ...styles.shotRow,
-                ...(isOverridden ? styles.shotRowEdited : {}),
-              }}
-            >
-              <span style={{ width: 50, color: '#999', fontSize: 11 }}>{play.eventNum}</span>
-              <span style={{ width: 30, fontSize: 12 }}>Q{play.quarter}</span>
-              <span style={{ flex: 1, fontSize: 13 }}>
-                {play.player && <span style={{ fontSize: 11, color: '#888', marginRight: 4 }}>
-                  {play.player}
-                </span>}
-                {play.description.substring(0, 60)}
-              </span>
-              <span style={{ width: 100 }}>
-                <select
-                  value={currentResult}
-                  onChange={(e) => onOverride(play.eventNum, e.target.value)}
-                  style={{
-                    ...styles.outcomeSelect,
-                    ...(isOverridden ? styles.outcomeSelectEdited : {}),
-                  }}
-                >
-                  <option value="Made">Made</option>
-                  <option value="Missed">Missed</option>
-                </select>
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 const styles = {
-  selectorRow: {
-    display: 'flex',
-    gap: '16px',
-    alignItems: 'flex-end',
-    marginBottom: '16px',
-    flexWrap: 'wrap',
-  },
-  selectorGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  label: {
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#888',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  select: {
-    padding: '7px 10px',
-    borderRadius: '6px',
-    border: '1px solid #d0d0d0',
-    fontSize: '13px',
-    cursor: 'pointer',
-    background: '#fafafa',
-  },
-  selectWide: {
-    padding: '7px 10px',
-    borderRadius: '6px',
-    border: '1px solid #d0d0d0',
-    fontSize: '13px',
-    cursor: 'pointer',
-    background: '#fafafa',
-    minWidth: '300px',
-  },
-  resetBtn: {
-    padding: '7px 14px',
-    borderRadius: '6px',
-    border: '1px solid #dc2626',
-    background: '#fff',
-    color: '#dc2626',
-    fontSize: '13px',
-    cursor: 'pointer',
-    alignSelf: 'flex-end',
-  },
-  loading: {
-    color: '#888',
-    fontSize: '14px',
-    padding: '32px 0',
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: '13px',
-    color: '#666',
-    marginBottom: '16px',
-  },
-  chartsRow: {
-    display: 'flex',
-    gap: '16px',
-    marginBottom: '24px',
-  },
-  chartPanel: {
-    flex: 1,
-    background: '#fff',
-    borderRadius: '8px',
-    padding: '16px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  },
-  chartTitle: {
-    fontSize: '15px',
-    fontWeight: '600',
-    marginBottom: '12px',
-    color: '#1a1a1a',
-  },
-  playList: {
-    background: '#fff',
-    borderRadius: '8px',
-    padding: '20px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  },
-  playListHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '16px',
-  },
-  playListTitle: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#1a1a1a',
-  },
-  playListHint: {
-    fontSize: '12px',
-    color: '#999',
-  },
-  filterRow: {
-    display: 'flex',
-    gap: '6px',
-    alignItems: 'center',
-    marginBottom: '12px',
-  },
-  filterBtn: {
-    padding: '4px 10px',
-    borderRadius: '4px',
-    border: '1px solid #e0e0e0',
-    background: '#fafafa',
-    fontSize: '12px',
-    cursor: 'pointer',
-    color: '#555',
-  },
-  filterBtnActive: {
-    background: '#1a1a1a',
-    color: '#fff',
-    border: '1px solid #1a1a1a',
-  },
-  shotTable: {
-    maxHeight: '360px',
-    overflowY: 'auto',
-  },
-  shotTableHeader: {
-    display: 'flex',
-    gap: '8px',
-    padding: '6px 8px',
-    background: '#f5f5f5',
-    borderRadius: '4px',
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#888',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    marginBottom: '2px',
-    position: 'sticky',
-    top: 0,
-  },
-  shotRow: {
-    display: 'flex',
-    gap: '8px',
-    alignItems: 'center',
-    padding: '6px 8px',
-    borderBottom: '1px solid #f5f5f5',
-  },
-  shotRowEdited: {
-    background: '#fff8f0',
-  },
-  outcomeSelect: {
-    padding: '3px 6px',
-    borderRadius: '4px',
-    border: '1px solid #d0d0d0',
-    fontSize: '12px',
-    cursor: 'pointer',
-    background: '#fafafa',
-    width: '80px',
-  },
-  outcomeSelectEdited: {
-    border: '1px solid #f59e0b',
-    background: '#fffbeb',
-  },
+  selectorRow: { display: 'flex', gap: '16px', alignItems: 'flex-end', marginBottom: '16px', flexWrap: 'wrap' },
+  resetBtn: { padding: '7px 14px', borderRadius: '6px', border: '1px solid #dc2626', background: '#fff', color: '#dc2626', fontSize: '13px', cursor: 'pointer', alignSelf: 'flex-end' },
+  status: { color: '#888', fontSize: '14px', padding: '32px 0', textAlign: 'center' },
+  errorText: { color: '#dc2626', fontSize: '13px', padding: '12px 0' },
+  subtitle: { fontSize: '13px', color: '#666', marginBottom: '16px' },
+  chartsRow: { display: 'flex', gap: '16px', marginBottom: '24px' },
+  chartPanel: { flex: 1, background: '#fff', borderRadius: '8px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
+  chartTitle: { fontSize: '15px', fontWeight: '600', marginBottom: '12px', color: '#1a1a1a' },
+  playList: { background: '#fff', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
+  playListHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
+  playListTitle: { fontSize: '14px', fontWeight: '600', color: '#1a1a1a' },
+  hint: { fontSize: '12px', color: '#999' },
+  filterRow: { display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '10px' },
+  filterLabel: { fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  filterBtn: { padding: '4px 10px', borderRadius: '4px', border: '1px solid #e0e0e0', background: '#fafafa', fontSize: '12px', cursor: 'pointer', color: '#555' },
+  filterBtnActive: { background: '#1a1a1a', color: '#fff', border: '1px solid #1a1a1a' },
+  table: { maxHeight: '400px', overflowY: 'auto' },
+  tableHeader: { display: 'flex', gap: '8px', padding: '6px 8px', background: '#f5f5f5', borderRadius: '4px', fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px', position: 'sticky', top: 0 },
+  tableRow: { display: 'flex', gap: '8px', alignItems: 'center', padding: '6px 8px', borderBottom: '1px solid #f5f5f5' },
+  tableRowEdited: { background: '#fff8f0' },
+  timeCell: { width: 80, fontSize: '12px', color: '#666', fontWeight: '600', flexShrink: 0 },
+  descCell: { flex: 1, fontSize: '13px', color: '#1a1a1a' },
+  outcomeSelect: { padding: '3px 6px', borderRadius: '4px', border: '1px solid #d0d0d0', fontSize: '12px', cursor: 'pointer', background: '#fafafa', width: '80px' },
+  outcomeSelectEdited: { border: '1px solid #f59e0b', background: '#fffbeb' },
+  nonEditable: { color: '#ccc', fontSize: '13px' },
 };
