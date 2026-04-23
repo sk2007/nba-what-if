@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
-from server.nba_client import get_games, get_play_by_play, get_win_prob_stats
+from server.nba_client import get_games, get_play_by_play
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])
@@ -43,7 +43,7 @@ def play_by_play(game_id):
 def boxscore(game_id):
     from nba_api.stats.endpoints import BoxScoreTraditionalV2
     try:
-        box = BoxScoreTraditionalV2(game_id=game_id)
+        box = BoxScoreTraditionalV2(game_id=game_id, timeout=30)
         team_df = box.get_data_frames()[1]
         rows = team_df.to_dict(orient="records")
         if len(rows) < 2:
@@ -76,25 +76,6 @@ def boxscore(game_id):
             "teamA": extract(row_map[team_a_name]),
             "teamB": extract(row_map[team_b_name]),
         })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 503
-
-
-@app.get("/api/stats/winprob")
-def win_prob_stats():
-    season = request.args.get("season")
-    season_type = request.args.get("season_type")
-    if not season or not season_type:
-        return jsonify({"error": "season and season_type are required"}), 400
-    thresholds = {
-        "threePointPct": _int_param("threePointPct", 0),
-        "fgPct": _int_param("fgPct", 0),
-        "turnovers": _int_param("turnovers", 999),
-        "rebounds": _int_param("rebounds", 0),
-        "ftPct": _int_param("ftPct", 0),
-    }
-    try:
-        return jsonify(get_win_prob_stats(season, season_type, thresholds))
     except Exception as e:
         return jsonify({"error": str(e)}), 503
 

@@ -1,10 +1,7 @@
-from nba_api.stats.endpoints import (
-    LeagueGameFinder,
-    PlayByPlayV2,
-    BoxScoreTraditionalV2,
-)
-from nba_api.stats.static import teams as nba_teams
-import pandas as pd
+import re
+import requests
+
+_CDN_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"}
 
 _cache = {}
 
@@ -15,9 +12,13 @@ def _cached(key, fn):
     return _cache[key]
 
 
-def _team_name_map():
-    """Returns dict of teamId -> full team name."""
-    return {t["id"]: t["full_name"] for t in nba_teams.get_teams()}
+# Season string "2024-25" -> start year 2024
+def _season_year(season):
+    return int(season.split("-")[0])
+
+
+# Playoff game IDs start with "0042", regular season with "0022"
+_SEASON_TYPE_PREFIX = {"Regular Season": "0022", "Playoffs": "0042"}
 
 
 def get_games(season, season_type):
@@ -30,34 +31,30 @@ def get_games(season, season_type):
 
 
 def _fetch_games(season, season_type):
-    finder = LeagueGameFinder(
-        season_nullable=season,
-        season_type_nullable=season_type,
-        league_id_nullable="00",
-    )
-    df = finder.get_data_frames()[0]
+    year = _season_year(season)
+    url = f"https://data.nba.com/data/v2015/json/mobile_teams/nba/{year}/league/00_full_schedule.json"
+    r = requests.get(url, headers=_CDN_HEADERS, timeout=15)
+    r.raise_for_status()
+    data = r.json()
 
-    # Each game appears twice (once per team). Pair by GAME_ID.
-    seen = {}
+    prefix = _SEASON_TYPE_PREFIX.get(season_type, "002")
     games = []
-    for _, row in df.iterrows():
-        gid = row["GAME_ID"]
-        if gid not in seen:
-            seen[gid] = row
-        else:
-            other = seen.pop(gid)
-            # Determine home vs away from MATCHUP (e.g. "BOS vs. MIA" = home, "BOS @ MIA" = away)
-            if "vs." in row["MATCHUP"]:
-                home, away = row, other
-            else:
-                home, away = other, row
+    for month in data["lscd"]:
+        for g in month["mscd"]["g"]:
+            if not g["gid"].startswith(prefix):
+                continue
+            # Only include completed games (st="3" means final)
+            if str(g.get("st")) != "3":
+                continue
+            home = g["h"]
+            away = g["v"]
             games.append({
-                "gameId": gid,
-                "teamA": home["TEAM_NAME"],
-                "teamB": away["TEAM_NAME"],
-                "date": home["GAME_DATE"],
-                "finalScoreA": int(home["PTS"]) if home["PTS"] else 0,
-                "finalScoreB": int(away["PTS"]) if away["PTS"] else 0,
+                "gameId": g["gid"],
+                "teamA": f"{home['tc']} {home['tn']}",
+                "teamB": f"{away['tc']} {away['tn']}",
+                "date": g["gdte"],
+                "finalScoreA": int(home["s"]) if home.get("s") else 0,
+                "finalScoreB": int(away["s"]) if away.get("s") else 0,
             })
 
     games.sort(key=lambda g: g["date"], reverse=True)
@@ -73,98 +70,100 @@ def get_play_by_play(game_id):
     return _cached(key, lambda: _fetch_play_by_play(game_id))
 
 
+def _parse_cdn_clock(clock_str, quarter):
+    """
+    Parse ISO 8601 duration e.g. 'PT11M44.00S' → (clock_display, clock_seconds, game_seconds).
+    clock_seconds = seconds remaining in the quarter.
+    game_seconds = elapsed seconds from tip-off.
+    """
+    m = re.match(r"PT(\d+)M([\d.]+)S", clock_str or "PT0M0.00S")
+    if m:
+        mins = int(m.group(1))
+        secs = float(m.group(2))
+        clock_seconds = int(mins * 60 + secs)
+    else:
+        clock_seconds = 0
+
+    display = f"{clock_seconds // 60}:{clock_seconds % 60:02d}"
+
+    if quarter <= 4:
+        quarter_start = (quarter - 1) * 720
+        quarter_duration = 720
+    else:
+        quarter_start = 2880 + (quarter - 5) * 300
+        quarter_duration = 300
+
+    game_seconds = quarter_start + (quarter_duration - clock_seconds)
+    return display, clock_seconds, game_seconds
+
+
 def _fetch_play_by_play(game_id):
     from server.win_probability import compute_wp_curve
 
-    pbp = PlayByPlayV2(game_id=game_id)
-    df = pbp.get_data_frames()[0]
+    # Fetch play-by-play from cdn.nba.com (not blocked unlike stats.nba.com)
+    pbp_url = f"https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_{game_id}.json"
+    box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
 
-    # Determine teamA (home) / teamB (away).
-    # Use play-by-play HOMEDESCRIPTION column: a play with HOMEDESCRIPTION set
-    # and a PLAYER1_TEAM_NICKNAME identifies the home team by nickname.
-    box = BoxScoreTraditionalV2(game_id=game_id)
-    team_df = box.get_data_frames()[1]  # team stats summary frame
-    team_names = team_df["TEAM_NAME"].tolist()
+    pbp_r = requests.get(pbp_url, headers=_CDN_HEADERS, timeout=15)
+    pbp_r.raise_for_status()
+    actions = pbp_r.json()["game"]["actions"]
 
-    home_nickname = None
-    for _, row in df.iterrows():
-        if row.get("HOMEDESCRIPTION") and row.get("PLAYER1_TEAM_NICKNAME"):
-            home_nickname = str(row["PLAYER1_TEAM_NICKNAME"])
-            break
+    box_r = requests.get(box_url, headers=_CDN_HEADERS, timeout=15)
+    box_r.raise_for_status()
+    box_game = box_r.json()["game"]
 
-    if home_nickname and len(team_names) >= 2:
-        if team_names[0].endswith(home_nickname):
-            team_a, team_b = team_names[0], team_names[1]
-        else:
-            team_a, team_b = team_names[1], team_names[0]
-    elif len(team_names) >= 2:
-        # Fallback: BoxScoreTraditionalV2 visitor=index 0, home=index 1
-        team_a, team_b = team_names[1], team_names[0]
-    else:
-        team_a = team_names[0] if team_names else ""
-        team_b = ""
+    home = box_game["homeTeam"]
+    away = box_game["awayTeam"]
+    team_a = f"{home['teamCity']} {home['teamName']}"  # home = teamA
+    team_b = f"{away['teamCity']} {away['teamName']}"
+    home_id = home["teamId"]
 
     plays = []
     score_a = 0
     score_b = 0
 
-    for _, row in df.iterrows():
-        if pd.isna(row["PERIOD"]) or pd.isna(row["EVENTMSGTYPE"]):
+    for action in actions:
+        action_type = action.get("actionType", "")
+        quarter = action.get("period", 0)
+        if not quarter:
             continue
-        quarter = int(row["PERIOD"])
-        clock_str = str(row["PCTIMESTRING"]) if row["PCTIMESTRING"] else "0:00"
 
-        # Parse clock string "MM:SS" → seconds remaining in quarter
-        parts = clock_str.split(":")
-        clock_seconds = int(parts[0]) * 60 + int(parts[1]) if len(parts) == 2 else 0
+        clock_display, clock_seconds, game_seconds = _parse_cdn_clock(action.get("clock", ""), quarter)
 
-        # Compute gameSeconds elapsed from tip-off.
-        # Regulation: Q1-Q4 each 12 min (720s). OT periods each 5 min (300s).
-        # quarter_start for OT: 2880 + (quarter - 5) * 300
-        if quarter <= 4:
-            quarter_start = (quarter - 1) * 720
-            quarter_duration = 720
-        else:
-            quarter_start = 2880 + (quarter - 5) * 300
-            quarter_duration = 300
-        game_seconds = quarter_start + (quarter_duration - clock_seconds)
-
-        # Parse score from SCORE column. NBA PlayByPlayV2 format: "VISITOR - HOME"
-        # so parts_score[0] = away (teamB), parts_score[1] = home (teamA).
-        score_str = str(row.get("SCORE", "")) or ""
-        if " - " in score_str:
-            parts_score = score_str.split(" - ")
+        # scoreHome = teamA (home), scoreAway = teamB (away)
+        score_str_a = action.get("scoreHome", "")
+        score_str_b = action.get("scoreAway", "")
+        if score_str_a:
             try:
-                score_b = int(parts_score[0])  # visitor = teamB
-                score_a = int(parts_score[1])  # home = teamA
+                score_a = int(score_str_a)
+                score_b = int(score_str_b)
             except ValueError:
                 pass
 
-        description = str(row.get("HOMEDESCRIPTION") or row.get("VISITORDESCRIPTION") or row.get("NEUTRALDESCRIPTION") or "")
-        team = str(row.get("PLAYER1_TEAM_NICKNAME") or "")
-        player = str(row.get("PLAYER1_NAME") or "")
-        event_type_id = int(row["EVENTMSGTYPE"]) if row["EVENTMSGTYPE"] else 0
+        event_type, editable, shot_pts = _classify_cdn_event(action)
 
-        event_type, editable, shot_pts = _classify_event(event_type_id, description)
+        team_id = action.get("teamId")
+        team_full = team_a if team_id == home_id else (team_b if team_id else None)
 
-        # Resolve team abbreviation to full name
-        team_full = team_a if team and team_a.endswith(team) else (team_b if team and team_b.endswith(team) else None)
+        player = action.get("playerNameI") or action.get("playerName") or None
 
-        plays.append({
-            "eventNum": int(row["EVENTNUM"]),
-            "clock": clock_str,
+        play = {
+            "eventNum": action.get("actionNumber", 0),
+            "clock": clock_display,
             "quarter": quarter,
             "clockSeconds": clock_seconds,
             "gameSeconds": game_seconds,
-            "description": description,
+            "description": action.get("description", ""),
             "scoreA": score_a,
             "scoreB": score_b,
             "eventType": event_type,
             "editable": editable,
             "team": team_full,
-            "player": player if player else None,
-            **({"shotPts": shot_pts} if shot_pts is not None else {}),
-        })
+            "player": player,
+        }
+        if shot_pts is not None:
+            play["shotPts"] = shot_pts
+        plays.append(play)
 
     wp_curve = compute_wp_curve(plays)
 
@@ -177,97 +176,33 @@ def _fetch_play_by_play(game_id):
     }
 
 
-def _classify_event(event_type_id, description):
+def _classify_cdn_event(action):
     """
-    nba_api EVENTMSGTYPE codes:
-    1=shot made, 2=shot missed, 3=free throw, 4=rebound, 5=turnover,
-    6=foul, 7=violation, 8=substitution, 9=timeout, 10=jump ball, 12=period start/end
+    CDN actionType values: '2pt', '3pt', 'freethrow', 'rebound', 'turnover',
+    'foul', 'timeout', 'substitution', 'jumpball', 'period', 'violation', etc.
     Returns (event_type_str, editable, shot_pts_or_None)
     """
-    desc_lower = description.lower()
-    if event_type_id in (1, 2):
-        editable = True
-        if "3pt" in desc_lower or "3-pt" in desc_lower:
-            pts = 3
-        elif event_type_id == 1:
-            pts = 2
-        else:
-            pts = 0
-        return "shot", editable, (pts if event_type_id == 1 else 0)
-    if event_type_id == 3:
-        made = "made" in desc_lower
+    action_type = action.get("actionType", "")
+    shot_result = action.get("shotResult", "")
+    made = shot_result == "Made"
+
+    if action_type in ("2pt", "3pt"):
+        pts = (3 if action_type == "3pt" else 2) if made else 0
+        return "shot", True, pts
+    if action_type == "freethrow":
         return "free_throw", True, (1 if made else 0)
-    if event_type_id == 4:
+    if action_type == "rebound":
         return "rebound", False, None
-    if event_type_id == 5:
+    if action_type == "turnover":
         return "turnover", False, None
-    if event_type_id == 6:
+    if action_type == "foul":
         return "foul", False, None
-    if event_type_id == 9:
+    if action_type == "timeout":
         return "timeout", False, None
-    if event_type_id == 8:
+    if action_type == "substitution":
         return "substitution", False, None
-    if event_type_id == 10:
+    if action_type == "jumpball":
         return "jump_ball", False, None
     return "other", False, None
 
 
-def get_win_prob_stats(season, season_type, thresholds):
-    """
-    Returns { gamesMatched, wins, winRate, season, seasonType }.
-    thresholds: dict with keys threePointPct, fgPct, turnovers, rebounds, ftPct (all ints).
-    Uses LeagueGameLog to get all team-game rows for the season, then filters.
-    """
-    key = f"teamlog:{season}:{season_type}"
-    rows = _cached(key, lambda: _fetch_team_game_log(season, season_type))
-    return _filter_and_count(rows, thresholds, season, season_type)
-
-
-def _fetch_team_game_log(season, season_type):
-    from nba_api.stats.endpoints import LeagueGameLog
-    log = LeagueGameLog(
-        season=season,
-        season_type_all_star=season_type,
-        league_id="00",
-    )
-    df = log.get_data_frames()[0]
-    rows = []
-    for _, row in df.iterrows():
-        rows.append({
-            "WL": str(row.get("WL", "")),
-            "FG_PCT": float(row["FG_PCT"]) if pd.notna(row["FG_PCT"]) else 0.0,
-            "FG3_PCT": float(row["FG3_PCT"]) if pd.notna(row["FG3_PCT"]) else 0.0,
-            "FT_PCT": float(row["FT_PCT"]) if pd.notna(row["FT_PCT"]) else 0.0,
-            "REB": int(row["REB"]) if pd.notna(row["REB"]) else 0,
-            "TOV": int(row["TOV"]) if pd.notna(row["TOV"]) else 0,
-        })
-    return rows
-
-
-def _filter_and_count(rows, thresholds, season, season_type):
-    three_pct = thresholds.get("threePointPct", 0) / 100
-    fg_pct = thresholds.get("fgPct", 0) / 100
-    max_tov = thresholds.get("turnovers", 999)
-    min_reb = thresholds.get("rebounds", 0)
-    ft_pct = thresholds.get("ftPct", 0) / 100
-
-    matched = [
-        r for r in rows
-        if r["FG3_PCT"] >= three_pct
-        and r["FG_PCT"] >= fg_pct
-        and r["TOV"] <= max_tov
-        and r["REB"] >= min_reb
-        and r["FT_PCT"] >= ft_pct
-    ]
-
-    wins = sum(1 for r in matched if r["WL"] == "W")
-    games_matched = len(matched)
-    win_rate = round(wins / games_matched * 100, 1) if games_matched > 0 else None
-
-    return {
-        "gamesMatched": games_matched,
-        "wins": wins,
-        "winRate": win_rate,
-        "season": season,
-        "seasonType": season_type,
-    }
