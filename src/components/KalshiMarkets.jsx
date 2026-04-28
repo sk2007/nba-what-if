@@ -26,6 +26,19 @@ const styles = {
   oddsValue: { fontSize: '13px', fontWeight: '700', textAlign: 'center' },
   oddsBookRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' },
   oddsBookName: { fontSize: '10px', color: '#bbb', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  advisorDivider: { margin: '14px 0 10px', borderTop: '1px dashed #e5e5e5' },
+  advisorLabel: { fontSize: '10px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' },
+  recommendBadge: { display: 'inline-block', fontSize: '11px', fontWeight: '700', padding: '3px 9px', borderRadius: '99px', marginBottom: '8px', letterSpacing: '0.05em' },
+  edgeLine: { fontSize: '12px', color: '#555', marginBottom: '4px' },
+  kellyLine: { fontSize: '12px', color: '#333', fontWeight: '600', marginBottom: '4px' },
+  rationale: { fontSize: '11px', color: '#888', fontStyle: 'italic', marginTop: '4px' },
+  bankrollPanel: { background: '#f8f8f8', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '16px 20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' },
+  bankrollInput: { border: '1px solid #ccc', borderRadius: '6px', padding: '6px 10px', fontSize: '14px', width: '120px' },
+  modeToggle: { display: 'flex', gap: '0', borderRadius: '6px', overflow: 'hidden', border: '1px solid #ccc' },
+  modeBtn: { padding: '6px 14px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', border: 'none', background: '#fff', color: '#555' },
+  modeBtnActive: { padding: '6px 14px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', border: 'none', background: '#1a1a1a', color: '#fff' },
+  portfolioSummary: { fontSize: '12px', color: '#555', marginLeft: 'auto' },
+  bankrollPrompt: { fontSize: '11px', color: '#bbb', marginTop: '8px' },
 };
 
 function statusStyle(status) {
@@ -148,6 +161,42 @@ function OddsSection({ oddsGame }) {
   );
 }
 
+function BankrollPanel({ bankroll, setBankroll, mode, setMode, portfolioSummary }) {
+  return (
+    <div style={styles.bankrollPanel}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ fontSize: '13px', color: '#555', fontWeight: '600' }}>Bankroll</span>
+        <span style={{ fontSize: '13px', color: '#555' }}>$</span>
+        <input
+          style={styles.bankrollInput}
+          type="number"
+          min="0"
+          placeholder="0"
+          value={bankroll}
+          onChange={e => setBankroll(e.target.value)}
+        />
+      </div>
+      <div style={styles.modeToggle}>
+        <button
+          style={mode === 'single' ? styles.modeBtnActive : styles.modeBtn}
+          onClick={() => setMode('single')}
+        >
+          Single-game
+        </button>
+        <button
+          style={mode === 'portfolio' ? styles.modeBtnActive : styles.modeBtn}
+          onClick={() => setMode('portfolio')}
+        >
+          Portfolio
+        </button>
+      </div>
+      {portfolioSummary && (
+        <div style={styles.portfolioSummary}>{portfolioSummary}</div>
+      )}
+    </div>
+  );
+}
+
 function GameCard({ event, markets, oddsGame }) {
   const occurrenceDate = markets[0]?.occurrence_datetime
     ? new Date(markets[0].occurrence_datetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
@@ -188,6 +237,8 @@ export default function KalshiMarkets() {
   const [loadedCount, setLoadedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
+  const [bankroll, setBankroll] = useState('');
+  const [mode, setMode] = useState('single');
 
   useEffect(() => {
     let cancelled = false;
