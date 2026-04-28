@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchKalshiNBAEvents, fetchKalshiMarkets, fetchOddsNBA } from '../api/nbaApi';
+import { computeEdge, computeKelly, getRecommendation } from '../utils/betAdvisor';
 
 const styles = {
   container: { padding: '0 0 40px' },
@@ -194,6 +195,73 @@ function BankrollPanel({ bankroll, setBankroll, mode, setMode, portfolioSummary 
         <div style={styles.portfolioSummary}>{portfolioSummary}</div>
       )}
     </div>
+  );
+}
+
+function AdvisorSection({ kalshiYesPct, kalshiYesTeam, oddsGame, bankroll, mode, portfolioAllocation }) {
+  const parsedBankroll = parseFloat(bankroll);
+  const hasBankroll = !isNaN(parsedBankroll) && parsedBankroll > 0;
+
+  if (!kalshiYesPct || kalshiYesPct <= 0) {
+    return (
+      <>
+        <div style={styles.advisorDivider} />
+        <div style={{ ...styles.edgeLine, color: '#bbb' }}>Insufficient market data</div>
+      </>
+    );
+  }
+
+  const edge = computeEdge(kalshiYesPct, oddsGame, kalshiYesTeam);
+
+  if (!edge) {
+    return (
+      <>
+        <div style={styles.advisorDivider} />
+        <div style={styles.advisorLabel}>Bet Advisor</div>
+        <div style={styles.edgeLine}>No sportsbook data available</div>
+      </>
+    );
+  }
+
+  const { sbEdge, midpointEdge, sbImplied } = edge;
+  const rec = getRecommendation(sbEdge);
+
+  let kellySizing = null;
+  if (hasBankroll && mode === 'single') {
+    kellySizing = computeKelly(sbEdge, kalshiYesPct, parsedBankroll);
+  }
+
+  const direction = sbEdge > 3 ? 'underprices' : sbEdge < -3 ? 'overprices' : 'fairly prices';
+  const action = sbEdge > 3 ? `Lean YES on ${kalshiYesTeam}.` : sbEdge < -3 ? `Lean NO on ${kalshiYesTeam}.` : 'No clear edge.';
+  const rationale = `Kalshi ${direction} ${kalshiYesTeam} at ${kalshiYesPct}¢ vs ${sbImplied.toFixed(1)}% sportsbook implied. ${action}`;
+
+  return (
+    <>
+      <div style={styles.advisorDivider} />
+      <div style={styles.advisorLabel}>Bet Advisor</div>
+      <span style={{ ...styles.recommendBadge, background: rec.color + '22', color: rec.color }}>
+        {rec.label}
+      </span>
+      <div style={styles.edgeLine}>
+        Sportsbook edge: <strong>{sbEdge > 0 ? '+' : ''}{sbEdge.toFixed(1)}%</strong>
+        {' '}| Midpoint edge: <strong>{midpointEdge > 0 ? '+' : ''}{midpointEdge.toFixed(1)}%</strong>
+      </div>
+      {hasBankroll && mode === 'single' && kellySizing && (
+        <div style={styles.kellyLine}>
+          Single-game: ${kellySizing.single} &nbsp;(half-Kelly: ${kellySizing.halfSingle})
+        </div>
+      )}
+      {hasBankroll && mode === 'single' && !kellySizing && (
+        <div style={{ ...styles.kellyLine, color: '#bbb' }}>No edge — skip this bet</div>
+      )}
+      {hasBankroll && mode === 'portfolio' && portfolioAllocation != null && (
+        <div style={styles.kellyLine}>Portfolio allocation: ${portfolioAllocation}</div>
+      )}
+      {!hasBankroll && (
+        <div style={styles.bankrollPrompt}>Enter bankroll above to see bet sizing.</div>
+      )}
+      <div style={styles.rationale}>{rationale}</div>
+    </>
   );
 }
 
