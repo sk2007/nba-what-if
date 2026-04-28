@@ -86,3 +86,67 @@ export function getRecommendation(sbEdge) {
   if (sbEdge >= -8) return { label: 'LEAN NO',    color: '#e67e22' };
   return               { label: 'STRONG NO',  color: '#c0392b' };
 }
+
+/**
+ * Single-game Kelly fraction, capped at 0.25.
+ *
+ * Formula: f = (edge * (b + 1) - 1) / b  where b = payout odds on YES
+ * edge here is sbEdge expressed as a fraction (e.g. 0.072 for 7.2%)
+ *
+ * @param {number} sbEdgePct   edge in percentage points (e.g. 7.2)
+ * @param {number} kalshiYesPct  Kalshi mid-price 0–100
+ * @param {number} bankroll
+ * @returns {{ single: number, halfSingle: number } | null}
+ *   Dollar amounts, or null if Kelly is negative (no edge).
+ */
+export function computeKelly(sbEdgePct, kalshiYesPct, bankroll) {
+  if (!bankroll || bankroll <= 0) return null;
+  if (!kalshiYesPct || kalshiYesPct <= 0 || kalshiYesPct >= 100) return null;
+
+  const p = kalshiYesPct / 100; // Kalshi implied prob of YES
+  const b = (1 / p) - 1;        // payout odds: win b per $1 staked
+  const edge = sbEdgePct / 100; // convert pct to fraction
+
+  // Standard Kelly: f* = (p_true * (b+1) - 1) / b
+  // p_true ≈ kalshi + edge (sportsbook as truth shifts our estimate)
+  const pTrue = p + edge;
+  const f = (pTrue * (b + 1) - 1) / b;
+
+  if (f <= 0) return null; // negative Kelly = no edge, don't bet
+
+  const capped = Math.min(f, 0.25);
+  const single = Math.round(capped * bankroll);
+  const halfSingle = Math.round((capped / 2) * bankroll);
+  return { single, halfSingle };
+}
+
+/**
+ * Portfolio Kelly: proportionally size bets across all positive-edge games
+ * so total allocation never exceeds the full bankroll.
+ *
+ * Each game's raw Kelly fraction is computed, negatives are zeroed out,
+ * then fractions are normalized so they sum to ≤ 1.0 (capped per-game at 0.25).
+ *
+ * @param {Array<{ sbEdgePct: number, kalshiYesPct: number }>} games
+ * @param {number} bankroll
+ * @returns {number[]}  Dollar allocation per game (same order as input). Zero = pass.
+ */
+export function computePortfolioKelly(games, bankroll) {
+  if (!bankroll || bankroll <= 0) return games.map(() => 0);
+
+  const fractions = games.map(({ sbEdgePct, kalshiYesPct }) => {
+    if (!kalshiYesPct || kalshiYesPct <= 0 || kalshiYesPct >= 100) return 0;
+    const p = kalshiYesPct / 100;
+    const b = (1 / p) - 1;
+    const pTrue = p + sbEdgePct / 100;
+    const f = (pTrue * (b + 1) - 1) / b;
+    return Math.max(0, Math.min(f, 0.25));
+  });
+
+  const total = fractions.reduce((s, f) => s + f, 0);
+  if (total === 0) return games.map(() => 0);
+
+  // Scale down if total > 1 so we never over-allocate
+  const scale = total > 1 ? 1 / total : 1;
+  return fractions.map(f => Math.round(f * scale * bankroll));
+}
