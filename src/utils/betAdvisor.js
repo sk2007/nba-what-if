@@ -64,7 +64,7 @@ export function computeEdge(kalshiYesPct, oddsGame, kalshiYesTeam) {
   } else if (awayNameLower.split(' ').some(t => yesTeamLower.includes(t))) {
     sbImplied = adjAway * 100;
   } else {
-    sbImplied = adjHome * 100;
+    return null;
   }
 
   const kalshiPct = kalshiYesPct;
