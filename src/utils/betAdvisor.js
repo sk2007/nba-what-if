@@ -100,6 +100,7 @@ export function getRecommendation(sbEdge) {
  *   Dollar amounts, or null if Kelly is negative (no edge).
  */
 export function computeKelly(sbEdgePct, kalshiYesPct, bankroll) {
+  if (sbEdgePct == null || isNaN(sbEdgePct)) return null;
   if (!bankroll || bankroll <= 0) return null;
   if (!kalshiYesPct || kalshiYesPct <= 0 || kalshiYesPct >= 100) return null;
 
@@ -135,6 +136,7 @@ export function computePortfolioKelly(games, bankroll) {
   if (!bankroll || bankroll <= 0) return games.map(() => 0);
 
   const fractions = games.map(({ sbEdgePct, kalshiYesPct }) => {
+    if (sbEdgePct == null || isNaN(sbEdgePct)) return 0;
     if (!kalshiYesPct || kalshiYesPct <= 0 || kalshiYesPct >= 100) return 0;
     const p = kalshiYesPct / 100;
     const b = (1 / p) - 1;
