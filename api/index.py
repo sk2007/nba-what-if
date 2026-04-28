@@ -47,6 +47,31 @@ def play_by_play(game_id):
         return jsonify({"error": str(e)}), 503
 
 
+ODDS_API_BASE = 'https://api.the-odds-api.com/v4'
+
+
+@app.get('/api/odds/nba')
+def nba_odds():
+    key = os.environ.get('ODDS_API_KEY', '')
+    if not key or key == 'your_key_here':
+        return jsonify({'error': 'ODDS_API_KEY not configured'}), 503
+    try:
+        r = http_requests.get(
+            f'{ODDS_API_BASE}/sports/basketball_nba/odds/',
+            params={
+                'apiKey': key,
+                'regions': 'us',
+                'markets': 'h2h,spreads,totals',
+                'oddsFormat': 'american',
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        return jsonify(r.json())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+
 @app.get('/api/kalshi/nba/events')
 def kalshi_nba_events():
     limit = request.args.get('limit', 20)
