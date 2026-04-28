@@ -361,11 +361,16 @@ export default function KalshiMarkets() {
 
   const allLoaded = loadedCount === events.length && events.length > 0;
 
+  const activeEvents = events.filter(ev => {
+    const evMarkets = marketsByEvent[ev.event_ticker] ?? [];
+    return evMarkets.some(m => m.status === 'active');
+  });
+
   // Build per-event advisor inputs for portfolio Kelly
   const parsedBankroll = parseFloat(bankroll);
   const hasBankroll = !isNaN(parsedBankroll) && parsedBankroll > 0;
 
-  const advisorInputs = events.map(ev => {
+  const advisorInputs = activeEvents.map(ev => {
     const evMarkets = marketsByEvent[ev.event_ticker] ?? [];
     const mk = evMarkets.find(m => m.yes_sub_title && m.no_sub_title);
     if (!mk) return { sbEdgePct: 0, kalshiYesPct: 0 };
@@ -377,7 +382,7 @@ export default function KalshiMarkets() {
 
   const portfolioAllocations = hasBankroll
     ? computePortfolioKelly(advisorInputs, parsedBankroll)
-    : events.map(() => null);
+    : activeEvents.map(() => null);
 
   const edgeCount = advisorInputs.filter(a => a.sbEdgePct > 3).length;
   const totalPortfolioAlloc = portfolioAllocations.reduce((s, a) => s + (a ?? 0), 0);
@@ -402,7 +407,7 @@ export default function KalshiMarkets() {
       )}
       {!loading && !err && (
         <div style={styles.grid}>
-          {events.map((ev, i) => (
+          {activeEvents.map((ev, i) => (
             <GameCard
               key={ev.event_ticker}
               event={ev}
