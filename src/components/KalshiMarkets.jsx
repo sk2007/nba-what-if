@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchKalshiNBAEvents, fetchKalshiMarkets, fetchOddsNBA } from '../api/nbaApi';
-import { computeEdge, computeKelly, getRecommendation } from '../utils/betAdvisor';
+import { computeEdge, computeKelly, computePortfolioKelly, getRecommendation } from '../utils/betAdvisor';
 
 const styles = {
   container: { padding: '0 0 40px' },
@@ -265,12 +265,18 @@ function AdvisorSection({ kalshiYesPct, kalshiYesTeam, oddsGame, bankroll, mode,
   );
 }
 
-function GameCard({ event, markets, oddsGame }) {
+function GameCard({ event, markets, oddsGame, bankroll, mode, portfolioAllocation }) {
   const occurrenceDate = markets[0]?.occurrence_datetime
     ? new Date(markets[0].occurrence_datetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
     : null;
 
   const status = markets[0]?.status ?? 'unknown';
+
+  // Use first market with both sides for advisor
+  const advisorMarket = markets.find(mk => mk.yes_sub_title && mk.no_sub_title) ?? null;
+  const kalshiYesPct = advisorMarket
+    ? Math.round((parseFloat(advisorMarket.yes_ask_dollars) + parseFloat(advisorMarket.yes_bid_dollars)) / 2 * 100)
+    : null;
 
   return (
     <div style={styles.card}>
@@ -294,6 +300,14 @@ function GameCard({ event, markets, oddsGame }) {
       })}
       {occurrenceDate && <div style={styles.occurrenceDate}>{occurrenceDate}</div>}
       <OddsSection oddsGame={oddsGame} />
+      <AdvisorSection
+        kalshiYesPct={kalshiYesPct}
+        kalshiYesTeam={advisorMarket?.yes_sub_title ?? ''}
+        oddsGame={oddsGame}
+        bankroll={bankroll}
+        mode={mode}
+        portfolioAllocation={portfolioAllocation}
+      />
     </div>
   );
 }
@@ -347,9 +361,40 @@ export default function KalshiMarkets() {
 
   const allLoaded = loadedCount === events.length && events.length > 0;
 
+  // Build per-event advisor inputs for portfolio Kelly
+  const parsedBankroll = parseFloat(bankroll);
+  const hasBankroll = !isNaN(parsedBankroll) && parsedBankroll > 0;
+
+  const advisorInputs = events.map(ev => {
+    const evMarkets = marketsByEvent[ev.event_ticker] ?? [];
+    const mk = evMarkets.find(m => m.yes_sub_title && m.no_sub_title);
+    if (!mk) return { sbEdgePct: 0, kalshiYesPct: 0 };
+    const kalshiYesPct = Math.round((parseFloat(mk.yes_ask_dollars) + parseFloat(mk.yes_bid_dollars)) / 2 * 100);
+    const oddsGame = matchOdds(oddsGames, ev.title);
+    const edge = computeEdge(kalshiYesPct, oddsGame, mk.yes_sub_title);
+    return { sbEdgePct: edge?.sbEdge ?? 0, kalshiYesPct };
+  });
+
+  const portfolioAllocations = hasBankroll
+    ? computePortfolioKelly(advisorInputs, parsedBankroll)
+    : events.map(() => null);
+
+  const edgeCount = advisorInputs.filter(a => a.sbEdgePct > 3).length;
+  const totalPortfolioAlloc = portfolioAllocations.reduce((s, a) => s + (a ?? 0), 0);
+  const portfolioSummary = hasBankroll && edgeCount > 0
+    ? `${edgeCount} edge${edgeCount > 1 ? 's' : ''} detected tonight — recommended total allocation: $${totalPortfolioAlloc} (${Math.round(totalPortfolioAlloc / parsedBankroll * 100)}% of bankroll)`
+    : null;
+
   return (
     <div style={styles.container}>
       <div style={styles.sectionLabel}>Kalshi NBA Game Markets</div>
+      <BankrollPanel
+        bankroll={bankroll}
+        setBankroll={setBankroll}
+        mode={mode}
+        setMode={setMode}
+        portfolioSummary={portfolioSummary}
+      />
       {loading && <div style={styles.loading}>Loading NBA events from Kalshi…</div>}
       {err && <div style={styles.error}>Error: {err}</div>}
       {!loading && !err && !allLoaded && (
@@ -357,12 +402,15 @@ export default function KalshiMarkets() {
       )}
       {!loading && !err && (
         <div style={styles.grid}>
-          {events.map(ev => (
+          {events.map((ev, i) => (
             <GameCard
               key={ev.event_ticker}
               event={ev}
               markets={marketsByEvent[ev.event_ticker] ?? []}
               oddsGame={matchOdds(oddsGames, ev.title)}
+              bankroll={bankroll}
+              mode={mode}
+              portfolioAllocation={portfolioAllocations[i]}
             />
           ))}
         </div>
