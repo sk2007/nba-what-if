@@ -33,6 +33,27 @@ export function fetchWinProb({ season, seasonType, threePointPct, fgPct, turnove
   return apiFetch(`/api/stats/winprob?${params}`);
 }
 
+export async function fetchOddsNBA() {
+  const res = await fetch('/api/odds/nba');
+  if (!res.ok) throw new Error(`Odds API HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function fetchKalshiNBAEvents(limit = 20) {
+  const res = await fetch(`/api/kalshi/nba/events?limit=${limit}`);
+  if (!res.ok) throw new Error(`Kalshi HTTP ${res.status}`);
+  const data = await res.json();
+  return data.events || [];
+}
+
+export async function fetchKalshiMarkets(eventTicker) {
+  const params = new URLSearchParams({ event_ticker: eventTicker });
+  const res = await fetch(`/api/kalshi/markets?${params}`);
+  if (!res.ok) throw new Error(`Kalshi HTTP ${res.status}`);
+  const data = await res.json();
+  return data.markets || [];
+}
+
 export function recomputeWpCurve(plays, overrides, teamA, totalSeconds = 2880) {
   let scoreA = 0;
   let scoreB = 0;
