@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sys
 import os
+import requests as http_requests
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -9,6 +10,9 @@ from server.nba_client import get_games, get_play_by_play
 
 app = Flask(__name__)
 CORS(app)
+
+KALSHI_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
+KALSHI_HEADERS = {'accept': 'application/json'}
 
 SEASONS = [
     f"{y}-{str(y+1)[-2:]}" for y in range(2024, 2014, -1)
@@ -41,3 +45,37 @@ def play_by_play(game_id):
         return jsonify(get_play_by_play(game_id))
     except Exception as e:
         return jsonify({"error": str(e)}), 503
+
+
+@app.get('/api/kalshi/nba/events')
+def kalshi_nba_events():
+    limit = request.args.get('limit', 20)
+    try:
+        r = http_requests.get(
+            f'{KALSHI_BASE}/events',
+            params={'series_ticker': 'KXNBAGAME', 'limit': limit},
+            headers=KALSHI_HEADERS,
+            timeout=10,
+        )
+        r.raise_for_status()
+        return jsonify(r.json())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+
+@app.get('/api/kalshi/markets')
+def kalshi_markets():
+    event_ticker = request.args.get('event_ticker')
+    if not event_ticker:
+        return jsonify({'error': 'event_ticker required'}), 400
+    try:
+        r = http_requests.get(
+            f'{KALSHI_BASE}/markets',
+            params={'event_ticker': event_ticker, 'limit': 10},
+            headers=KALSHI_HEADERS,
+            timeout=10,
+        )
+        r.raise_for_status()
+        return jsonify(r.json())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
