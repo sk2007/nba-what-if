@@ -53,6 +53,8 @@ const styles = {
   modalEmpty: { color: '#bbb', fontSize: '13px', textAlign: 'center', padding: '32px 0' },
   propRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' },
   propLabel: { fontSize: '13px', color: '#333', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '8px' },
+  playerHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', userSelect: 'none' },
+  playerName: { fontSize: '13px', fontWeight: '700', color: '#1a1a1a' },
 };
 
 function statusStyle(status) {
@@ -77,6 +79,16 @@ function formatAmerican(val) {
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
+}
+
+function groupByPlayer(markets) {
+  const map = new Map();
+  for (const mk of markets) {
+    const player = mk.yes_sub_title?.split(': ')[0] ?? 'Unknown';
+    if (!map.has(player)) map.set(player, []);
+    map.get(player).push(mk);
+  }
+  return Array.from(map.entries()).map(([player, lines]) => ({ player, lines }));
 }
 
 // Pick the most liquid/well-known book available for a game
