@@ -199,6 +199,7 @@ function PropsModal({ gameTitle, gameSuffix, onClose }) {
   const [activeTab, setActiveTab] = useState('KXNBAPTS');
   const [propsByTab, setPropsByTab] = useState({});
   const [tabLoading, setTabLoading] = useState(false);
+  const [openPlayer, setOpenPlayer] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -218,7 +219,12 @@ function PropsModal({ gameTitle, gameSuffix, onClose }) {
     return () => { cancelled = true; };
   }, [activeTab, gameSuffix]);
 
+  useEffect(() => {
+    setOpenPlayer(null);
+  }, [activeTab]);
+
   const markets = propsByTab[activeTab];
+  const playerGroups = markets ? groupByPlayer(markets) : [];
 
   return (
     <div style={styles.backdrop} onClick={onClose}>
@@ -243,16 +249,31 @@ function PropsModal({ gameTitle, gameSuffix, onClose }) {
           {!tabLoading && markets && markets.length === 0 && (
             <div style={styles.modalEmpty}>No active markets</div>
           )}
-          {!tabLoading && markets && markets.map(mk => {
-            const pct = Math.round((parseFloat(mk.yes_ask_dollars) + parseFloat(mk.yes_bid_dollars)) / 2 * 100);
-            const color = pctColor(pct);
+          {!tabLoading && playerGroups.map(({ player, lines }) => {
+            const isOpen = openPlayer === player;
             return (
-              <div key={mk.ticker} style={styles.propRow}>
-                <span style={styles.propLabel}>{mk.yes_sub_title}</span>
-                <div style={styles.barWrap}>
-                  <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '4px', transition: 'width 0.4s' }} />
+              <div key={player}>
+                <div
+                  style={styles.playerHeader}
+                  onClick={() => setOpenPlayer(isOpen ? null : player)}
+                >
+                  <span style={styles.playerName}>{player}</span>
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>{isOpen ? '▼' : '▶'}</span>
                 </div>
-                <span style={{ ...styles.pctLabel, color }}>{pct}¢</span>
+                {isOpen && lines.map(mk => {
+                  const pct = Math.round((parseFloat(mk.yes_ask_dollars) + parseFloat(mk.yes_bid_dollars)) / 2 * 100);
+                  const color = pctColor(pct);
+                  const lineLabel = mk.yes_sub_title?.split(': ')[1] ?? mk.yes_sub_title;
+                  return (
+                    <div key={mk.ticker} style={{ ...styles.propRow, paddingLeft: '12px' }}>
+                      <span style={styles.propLabel}>{lineLabel}</span>
+                      <div style={styles.barWrap}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '4px', transition: 'width 0.4s' }} />
+                      </div>
+                      <span style={{ ...styles.pctLabel, color }}>{pct}¢</span>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
