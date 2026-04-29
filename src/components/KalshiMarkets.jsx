@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchKalshiNBAEvents, fetchKalshiMarkets, fetchOddsNBA } from '../api/nbaApi';
+import { fetchKalshiNBAEvents, fetchKalshiMarkets, fetchOddsNBA, fetchKalshiProps } from '../api/nbaApi';
 import { computeEdge, computeKelly, computePortfolioKelly, getRecommendation } from '../utils/betAdvisor';
 
 const styles = {
@@ -40,6 +40,19 @@ const styles = {
   modeBtnActive: { padding: '6px 14px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', border: 'none', background: '#1a1a1a', color: '#fff' },
   portfolioSummary: { fontSize: '12px', color: '#555', marginLeft: 'auto' },
   bankrollPrompt: { fontSize: '11px', color: '#bbb', marginTop: '8px' },
+  viewPropsBtn: { marginTop: '14px', width: '100%', padding: '8px 0', fontSize: '12px', fontWeight: '600', color: '#2563eb', background: 'none', border: '1px solid #2563eb', borderRadius: '6px', cursor: 'pointer', letterSpacing: '0.03em' },
+  backdrop: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  modal: { background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '640px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,0.18)', margin: '0 16px' },
+  modalHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 0', borderBottom: '1px solid #f0f0f0', paddingBottom: '14px' },
+  modalTitle: { fontSize: '15px', fontWeight: '700', color: '#1a1a1a' },
+  modalClose: { fontSize: '20px', color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1, padding: '0 4px' },
+  modalTabs: { display: 'flex', borderBottom: '1px solid #f0f0f0', padding: '0 20px' },
+  modalTab: { padding: '10px 14px', fontSize: '12px', fontWeight: '600', color: '#888', cursor: 'pointer', border: 'none', background: 'none', borderBottom: '2px solid transparent', marginBottom: '-1px' },
+  modalTabActive: { padding: '10px 14px', fontSize: '12px', fontWeight: '600', color: '#1a1a1a', cursor: 'pointer', border: 'none', background: 'none', borderBottom: '2px solid #1a1a1a', marginBottom: '-1px' },
+  modalBody: { overflowY: 'auto', padding: '16px 20px', flex: 1 },
+  modalEmpty: { color: '#bbb', fontSize: '13px', textAlign: 'center', padding: '32px 0' },
+  propRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' },
+  propLabel: { fontSize: '13px', color: '#333', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '8px' },
 };
 
 function statusStyle(status) {
@@ -159,6 +172,81 @@ function OddsSection({ oddsGame }) {
         </div>
       </div>
     </>
+  );
+}
+
+const PROP_TABS = [
+  { label: 'Points',   series: 'KXNBAPTS' },
+  { label: 'Rebounds', series: 'KXNBAREB' },
+  { label: 'Assists',  series: 'KXNBAAST' },
+  { label: 'Threes',   series: 'KXNBA3PT' },
+  { label: 'PRA',      series: 'KXNBAPRA' },
+];
+
+function PropsModal({ gameTitle, gameSuffix, onClose }) {
+  const [activeTab, setActiveTab] = useState('KXNBAPTS');
+  const [propsByTab, setPropsByTab] = useState({});
+  const [tabLoading, setTabLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (propsByTab[activeTab] !== undefined) return;
+      setTabLoading(true);
+      try {
+        const markets = await fetchKalshiProps(gameSuffix, activeTab);
+        if (!cancelled) setPropsByTab(prev => ({ ...prev, [activeTab]: markets }));
+      } catch {
+        if (!cancelled) setPropsByTab(prev => ({ ...prev, [activeTab]: [] }));
+      } finally {
+        if (!cancelled) setTabLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [activeTab, gameSuffix]);
+
+  const markets = propsByTab[activeTab];
+
+  return (
+    <div style={styles.backdrop} onClick={onClose}>
+      <div style={styles.modal} onClick={e => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <div style={styles.modalTitle}>{gameTitle} — Player Props</div>
+          <button style={styles.modalClose} onClick={onClose}>×</button>
+        </div>
+        <div style={styles.modalTabs}>
+          {PROP_TABS.map(tab => (
+            <button
+              key={tab.series}
+              style={activeTab === tab.series ? styles.modalTabActive : styles.modalTab}
+              onClick={() => setActiveTab(tab.series)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div style={styles.modalBody}>
+          {tabLoading && <div style={styles.modalEmpty}>Loading…</div>}
+          {!tabLoading && markets && markets.length === 0 && (
+            <div style={styles.modalEmpty}>No active markets</div>
+          )}
+          {!tabLoading && markets && markets.map(mk => {
+            const pct = Math.round((parseFloat(mk.yes_ask_dollars) + parseFloat(mk.yes_bid_dollars)) / 2 * 100);
+            const color = pctColor(pct);
+            return (
+              <div key={mk.ticker} style={styles.propRow}>
+                <span style={styles.propLabel}>{mk.yes_sub_title}</span>
+                <div style={styles.barWrap}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '4px', transition: 'width 0.4s' }} />
+                </div>
+                <span style={{ ...styles.pctLabel, color }}>{pct}¢</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
