@@ -54,6 +54,14 @@ export async function fetchKalshiMarkets(eventTicker) {
   return data.markets || [];
 }
 
+export async function fetchKalshiProps(gameSuffix, series) {
+  const params = new URLSearchParams({ game_suffix: gameSuffix, series });
+  const res = await fetch(`/api/kalshi/props?${params}`);
+  if (!res.ok) throw new Error(`Kalshi props HTTP ${res.status}`);
+  const data = await res.json();
+  return data.markets || [];
+}
+
 export function recomputeWpCurve(plays, overrides, teamA, totalSeconds = 2880) {
   let scoreA = 0;
   let scoreB = 0;
