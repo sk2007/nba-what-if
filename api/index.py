@@ -104,3 +104,30 @@ def kalshi_markets():
         return jsonify(r.json())
     except Exception as e:
         return jsonify({'error': str(e)}), 503
+
+
+PROP_SERIES = {'KXNBAPTS', 'KXNBAREB', 'KXNBAAST', 'KXNBA3PT', 'KXNBAPRA'}
+
+
+@app.get('/api/kalshi/props')
+def kalshi_props():
+    game_suffix = request.args.get('game_suffix')
+    series = request.args.get('series')
+    if not game_suffix or not series:
+        return jsonify({'error': 'game_suffix and series are required'}), 400
+    if series not in PROP_SERIES:
+        return jsonify({'error': f'series must be one of {sorted(PROP_SERIES)}'}), 400
+    event_ticker = f'{series}-{game_suffix}'
+    try:
+        r = http_requests.get(
+            f'{KALSHI_BASE}/markets',
+            params={'event_ticker': event_ticker, 'limit': 50},
+            headers=KALSHI_HEADERS,
+            timeout=10,
+        )
+        r.raise_for_status()
+        all_markets = r.json().get('markets', [])
+        active = [m for m in all_markets if m.get('status') == 'active']
+        return jsonify({'markets': active})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
