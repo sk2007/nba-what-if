@@ -360,43 +360,57 @@ function GameCard({ event, markets, oddsGame, bankroll, mode, portfolioAllocatio
 
   const status = markets[0]?.status ?? 'unknown';
 
-  // Use first market with both sides for advisor
   const advisorMarket = markets.find(mk => mk.yes_sub_title && mk.no_sub_title) ?? null;
   const kalshiYesPct = advisorMarket
     ? Math.round((parseFloat(advisorMarket.yes_ask_dollars) + parseFloat(advisorMarket.yes_bid_dollars)) / 2 * 100)
     : null;
 
+  const [modalOpen, setModalOpen] = useState(false);
+  const gameSuffix = event.event_ticker.split('-').slice(1).join('-');
+
   return (
-    <div style={styles.card}>
-      <div style={styles.cardTitle}>{event.title}</div>
-      <div style={styles.cardSub}>{event.sub_title}</div>
-      <span style={{ ...styles.statusBadge, ...statusStyle(status) }}>
-        {status.toUpperCase()}
-      </span>
-      {markets.map(mk => {
-        const pct = Math.round((parseFloat(mk.yes_ask_dollars) + parseFloat(mk.yes_bid_dollars)) / 2 * 100);
-        const color = pctColor(pct);
-        return (
-          <div key={mk.ticker} style={styles.marketRow}>
-            <span style={styles.teamLabel}>{mk.yes_sub_title}</span>
-            <div style={styles.barWrap}>
-              <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '4px', transition: 'width 0.4s' }} />
+    <>
+      <div style={styles.card}>
+        <div style={styles.cardTitle}>{event.title}</div>
+        <div style={styles.cardSub}>{event.sub_title}</div>
+        <span style={{ ...styles.statusBadge, ...statusStyle(status) }}>
+          {status.toUpperCase()}
+        </span>
+        {markets.map(mk => {
+          const pct = Math.round((parseFloat(mk.yes_ask_dollars) + parseFloat(mk.yes_bid_dollars)) / 2 * 100);
+          const color = pctColor(pct);
+          return (
+            <div key={mk.ticker} style={styles.marketRow}>
+              <span style={styles.teamLabel}>{mk.yes_sub_title}</span>
+              <div style={styles.barWrap}>
+                <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '4px', transition: 'width 0.4s' }} />
+              </div>
+              <span style={{ ...styles.pctLabel, color }}>{pct}¢</span>
             </div>
-            <span style={{ ...styles.pctLabel, color }}>{pct}¢</span>
-          </div>
-        );
-      })}
-      {occurrenceDate && <div style={styles.occurrenceDate}>{occurrenceDate}</div>}
-      <OddsSection oddsGame={oddsGame} />
-      <AdvisorSection
-        kalshiYesPct={kalshiYesPct}
-        kalshiYesTeam={advisorMarket?.yes_sub_title ?? ''}
-        oddsGame={oddsGame}
-        bankroll={bankroll}
-        mode={mode}
-        portfolioAllocation={portfolioAllocation}
-      />
-    </div>
+          );
+        })}
+        {occurrenceDate && <div style={styles.occurrenceDate}>{occurrenceDate}</div>}
+        <OddsSection oddsGame={oddsGame} />
+        <AdvisorSection
+          kalshiYesPct={kalshiYesPct}
+          kalshiYesTeam={advisorMarket?.yes_sub_title ?? ''}
+          oddsGame={oddsGame}
+          bankroll={bankroll}
+          mode={mode}
+          portfolioAllocation={portfolioAllocation}
+        />
+        <button style={styles.viewPropsBtn} onClick={() => setModalOpen(true)}>
+          View Player Props
+        </button>
+      </div>
+      {modalOpen && (
+        <PropsModal
+          gameTitle={event.title}
+          gameSuffix={gameSuffix}
+          onClose={() => setModalOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
