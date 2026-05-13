@@ -123,6 +123,26 @@ def kalshi_markets():
         return jsonify({'error': str(e)}), 503
 
 
+@app.get('/api/kalshi/props')
+def kalshi_props():
+    game_suffix = request.args.get('game_suffix')
+    series = request.args.get('series')
+    if not game_suffix or not series:
+        return jsonify({'error': 'game_suffix and series required'}), 400
+    event_ticker = f'{series}-{game_suffix}'
+    try:
+        r = http_requests.get(
+            f'{KALSHI_BASE}/markets',
+            params={'event_ticker': event_ticker, 'limit': 100, 'status': 'open'},
+            headers=KALSHI_HEADERS,
+            timeout=10,
+        )
+        r.raise_for_status()
+        return jsonify(r.json())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+
 ODDS_API_BASE = 'https://api.the-odds-api.com/v4'
 
 
