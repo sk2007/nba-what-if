@@ -1,9 +1,19 @@
+import json
+from pathlib import Path
 import re
 import requests
 
 _CDN_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"}
+_NBA_LIVE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json,text/plain,*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nba.com/",
+    "Origin": "https://www.nba.com",
+}
 
 _cache = {}
+_CACHE_DIR = Path(__file__).resolve().parent / "cache"
 
 
 def _cached(key, fn):
@@ -31,6 +41,10 @@ def get_games(season, season_type):
 
 
 def _fetch_games(season, season_type):
+    cached_games = _read_cached_games(season, season_type)
+    if cached_games is not None:
+        return cached_games
+
     year = _season_year(season)
     url = f"https://data.nba.com/data/v2015/json/mobile_teams/nba/{year}/league/00_full_schedule.json"
     r = requests.get(url, headers=_CDN_HEADERS, timeout=15)
@@ -59,6 +73,15 @@ def _fetch_games(season, season_type):
 
     games.sort(key=lambda g: g["date"], reverse=True)
     return games
+
+
+def _read_cached_games(season, season_type):
+    cache_name = f"games_{season}_{season_type.replace(' ', '_')}.json"
+    cache_path = _CACHE_DIR / cache_name
+    if not cache_path.exists():
+        return None
+    with cache_path.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def get_play_by_play(game_id):
@@ -98,19 +121,22 @@ def _parse_cdn_clock(clock_str, quarter):
 
 
 def _fetch_play_by_play(game_id):
+    from nba_api.live.nba.endpoints import boxscore, playbyplay
     from server.win_probability import compute_wp_curve
 
-    # Fetch play-by-play from cdn.nba.com (not blocked unlike stats.nba.com)
-    pbp_url = f"https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_{game_id}.json"
-    box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+    pbp_data = playbyplay.PlayByPlay(
+        game_id=game_id,
+        headers=_NBA_LIVE_HEADERS,
+        timeout=15,
+    ).nba_response.get_dict()
+    actions = pbp_data["game"]["actions"]
 
-    pbp_r = requests.get(pbp_url, headers=_CDN_HEADERS, timeout=15)
-    pbp_r.raise_for_status()
-    actions = pbp_r.json()["game"]["actions"]
-
-    box_r = requests.get(box_url, headers=_CDN_HEADERS, timeout=15)
-    box_r.raise_for_status()
-    box_game = box_r.json()["game"]
+    box_data = boxscore.BoxScore(
+        game_id=game_id,
+        headers=_NBA_LIVE_HEADERS,
+        timeout=15,
+    ).nba_response.get_dict()
+    box_game = box_data["game"]
 
     home = box_game["homeTeam"]
     away = box_game["awayTeam"]
@@ -204,5 +230,3 @@ def _classify_cdn_event(action):
     if action_type == "jumpball":
         return "jump_ball", False, None
     return "other", False, None
-
-
