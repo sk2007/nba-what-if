@@ -1,5 +1,14 @@
 export const sliderConfig = [
   {
+    key: 'winPct',
+    label: 'Win %',
+    min: 0,
+    max: 100,
+    default: 50,
+    unit: '%',
+    direction: 1,
+  },
+  {
     key: 'threePointPct',
     label: '3-Point %',
     min: 0,

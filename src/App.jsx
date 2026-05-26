@@ -144,7 +144,7 @@ export default function App() {
           <PlayEditor season={season} seasonType={seasonType} />
         </>
       )}
-      {tab === 'Kalshi Markets' && (
+{tab === 'Kalshi Markets' && (
         kalshiUnlocked
           ? <KalshiMarkets />
           : <KalshiPasswordGate onUnlock={() => setKalshiUnlocked(true)} />

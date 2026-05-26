@@ -66,14 +66,10 @@ export default function StatModel({ season, seasonType }) {
         </p>
         {error && <p style={styles.errorText}>Error: {error}</p>}
         {!error && result && (
-          <p style={styles.resultSub}>
-            {result.gamesMatched > 0
-              ? `Based on ${result.gamesMatched} matching games`
-              : 'No matching games found'}
-          </p>
+          <p style={styles.resultSub}>logistic regression model</p>
         )}
         {!error && !result && !loading && (
-          <p style={styles.resultSub}>based on stat thresholds</p>
+          <p style={styles.resultSub}>logistic regression model</p>
         )}
       </div>
     </div>
