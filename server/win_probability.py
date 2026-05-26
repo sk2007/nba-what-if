@@ -28,6 +28,8 @@ def compute_wp_curve(plays):
         curve.append({
             "gameSeconds": elapsed,
             "wp": win_prob(diff, remaining, total_seconds),
+            "scoreA": play["scoreA"],
+            "scoreB": play["scoreB"],
         })
     return curve
 

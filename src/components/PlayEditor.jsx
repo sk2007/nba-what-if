@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts';
-import { fetchPlayByPlay, recomputeWpCurve } from '../api/nbaApi';
+import { fetchPlayByPlay, recomputeWpCurveRemote } from '../api/nbaApi';
 import GameSelector from './GameSelector';
 
 const EVENT_TYPES = ['shot_2pt', 'shot_3pt', 'free_throw', 'rebound', 'turnover', 'foul', 'timeout', 'substitution', 'other'];
@@ -31,6 +31,26 @@ function buildDescription(eventType, player, team, made) {
   if (eventType === 'free_throw') return `${base} Free Throw (${made ? 'Made' : 'Missed'})`;
   return `${base} ${EVENT_LABELS[eventType]}`;
 }
+
+function ModelWinProb({ wpCurve, teamA }) {
+  if (!wpCurve.length) return null;
+  const prob = wpCurve[wpCurve.length - 1].wp;
+  const color = prob >= 65 ? '#16a34a' : prob <= 35 ? '#dc2626' : '#2563eb';
+  return (
+    <div style={modelPanelStyles.panel}>
+      <span style={modelPanelStyles.label}>Final Win Prob ({teamA})</span>
+      <span style={{ ...modelPanelStyles.prob, color }}>{prob}%</span>
+      <span style={modelPanelStyles.sub}>neural network · end of game</span>
+    </div>
+  );
+}
+
+const modelPanelStyles = {
+  panel: { display: 'flex', alignItems: 'center', gap: '16px', background: '#fff', borderRadius: '8px', padding: '14px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '16px' },
+  label: { fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' },
+  prob: { fontSize: '36px', fontWeight: '700', lineHeight: 1, transition: 'color 0.2s' },
+  sub: { fontSize: '11px', color: '#bbb' },
+};
 
 let _addedCounter = -1;
 function nextAddedId() { return _addedCounter--; }
@@ -180,7 +200,7 @@ const QUARTER_BOUNDARIES = [
   { seconds: 2160, label: 'Q4' },
 ];
 
-function WinProbChart({ data, title, color, teamA }) {
+function WinProbChart({ data, title, color, teamA, teamB }) {
   return (
     <div style={styles.chartPanel}>
       <h3 style={styles.chartTitle}>{title}</h3>
@@ -206,11 +226,22 @@ function WinProbChart({ data, title, color, teamA }) {
             width={42}
           />
           <Tooltip
-            formatter={(v) => [`${v}%`, `${teamA} Win Prob`]}
-            labelFormatter={(s) => {
-              const min = Math.floor(s / 60);
-              const sec = s % 60;
-              return `${min}:${String(sec).padStart(2, '0')}`;
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const d = payload[0].payload;
+              const min = Math.floor(label / 60);
+              const sec = label % 60;
+              const timeStr = `${min}:${String(sec).padStart(2, '0')}`;
+              const hasScore = d.scoreA !== undefined && d.scoreB !== undefined;
+              return (
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', lineHeight: '1.6' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '2px' }}>{timeStr}</div>
+                  {hasScore && (
+                    <div style={{ color: '#555' }}>{teamA} {d.scoreA} – {d.scoreB} {teamB}</div>
+                  )}
+                  <div style={{ color }}>{teamA} Win Prob: {d.wp}%</div>
+                </div>
+              );
             }}
           />
           {QUARTER_BOUNDARIES.map((b) => (
@@ -282,8 +313,19 @@ export default function PlayEditor({ season, seasonType }) {
 
   const allPlays = game ? [...game.plays, ...addedPlays] : [];
   const hasChanges = Object.keys(overrides).length > 0 || addedPlays.length > 0;
-  const totalSeconds = allPlays.length > 0 ? Math.max(2880, ...allPlays.map((p) => p.gameSeconds)) : 2880;
-  const whatIfCurve = game ? recomputeWpCurve(allPlays, overrides, game.teamA, totalSeconds) : [];
+
+  const [whatIfCurve, setWhatIfCurve] = useState([]);
+  const wpDebounceRef = useRef(null);
+  useEffect(() => {
+    if (!game) { setWhatIfCurve([]); return; }
+    if (wpDebounceRef.current) clearTimeout(wpDebounceRef.current);
+    wpDebounceRef.current = setTimeout(() => {
+      recomputeWpCurveRemote(allPlays, overrides, game.teamA)
+        .then(setWhatIfCurve)
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(wpDebounceRef.current);
+  }, [allPlays.length, addedPlays, overrides, game]);
 
   const quarters = [...new Set(allPlays.map((p) => p.quarter))].sort((a, b) => a - b);
   const filteredPlays = (quarterFilter === 'all' ? allPlays : allPlays.filter((p) => p.quarter === Number(quarterFilter)))
@@ -321,14 +363,17 @@ export default function PlayEditor({ season, seasonType }) {
             {game.teamA} Win Probability · {game.teamA} {game.plays.at(-1)?.scoreA ?? '—'} – {game.plays.at(-1)?.scoreB ?? '—'} {game.teamB}
           </p>
           <div style={styles.chartsRow}>
-            <WinProbChart data={game.wpCurve} title="Original" color="#2563eb" teamA={game.teamA} />
+            <WinProbChart data={game.wpCurve} title="Original" color="#2563eb" teamA={game.teamA} teamB={game.teamB} />
             <WinProbChart
               data={whatIfCurve}
               title={hasChanges ? `What If (${changeLabel})` : 'What If (no edits yet)'}
               color="#dc2626"
               teamA={game.teamA}
+              teamB={game.teamB}
             />
           </div>
+
+          <ModelWinProb wpCurve={whatIfCurve} teamA={game.teamA} />
 
           <div style={styles.playList}>
             <div style={styles.playListHeader}>

@@ -20,18 +20,6 @@ export function fetchPlayByPlay(gameId) {
   return apiFetch(`/api/games/${gameId}/playbyplay`);
 }
 
-export function fetchWinProb({ season, seasonType, threePointPct, fgPct, turnovers, rebounds, ftPct }) {
-  const params = new URLSearchParams({
-    season,
-    season_type: seasonType,
-    threePointPct,
-    fgPct,
-    turnovers,
-    rebounds,
-    ftPct,
-  });
-  return apiFetch(`/api/stats/winprob?${params}`);
-}
 
 export async function fetchOddsNBA() {
   const res = await fetch('/api/odds/nba');
@@ -62,6 +50,17 @@ export async function fetchKalshiProps(gameSuffix, series) {
   return data.markets || [];
 }
 
+export async function recomputeWpCurveRemote(plays, overrides, teamA) {
+  const res = await fetch('/api/wp/recompute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ teamA, plays, overrides }),
+  });
+  if (!res.ok) throw new Error(`WP recompute HTTP ${res.status}`);
+  const data = await res.json();
+  return data.wpCurve;
+}
+
 export function recomputeWpCurve(plays, overrides, teamA, totalSeconds = 2880) {
   let scoreA = 0;
   let scoreB = 0;
@@ -86,7 +85,7 @@ export function recomputeWpCurve(plays, overrides, teamA, totalSeconds = 2880) {
     const k = 0.004 * (1 + (totalSeconds - remaining) / totalSeconds);
     const diff = scoreA - scoreB;
     const p = 1 / (1 + Math.exp(-k * diff * 100));
-    curve.push({ gameSeconds: play.gameSeconds, wp: Math.round(p * 100) });
+    curve.push({ gameSeconds: play.gameSeconds, wp: Math.round(p * 100), scoreA, scoreB });
   }
 
   return curve;
