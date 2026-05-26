@@ -122,7 +122,7 @@ def _parse_cdn_clock(clock_str, quarter):
 
 def _fetch_play_by_play(game_id):
     from nba_api.live.nba.endpoints import boxscore, playbyplay
-    from server.win_probability import compute_wp_curve
+    from server.wp_mlp import compute_wp_curve
 
     pbp_data = playbyplay.PlayByPlay(
         game_id=game_id,
@@ -191,7 +191,7 @@ def _fetch_play_by_play(game_id):
             play["shotPts"] = shot_pts
         plays.append(play)
 
-    wp_curve = compute_wp_curve(plays)
+    wp_curve = compute_wp_curve(plays, team_a)
 
     return {
         "gameId": game_id,
