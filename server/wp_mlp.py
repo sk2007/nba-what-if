@@ -1,61 +1,72 @@
 import os
-import joblib
-import torch
-import numpy as np
-import pandas as pd
 
 _DIR = os.path.dirname(os.path.dirname(__file__))
 _PIPELINE_PATH = os.path.join(_DIR, 'wp_model_feature_pipeline.joblib')
-_MODEL_PATH = os.path.join(_DIR, 'wp_model_mlp.pt')
+_ONNX_PATH = os.path.join(_DIR, 'wp_model_mlp.onnx')
 
-
-class _WPNet(torch.nn.Module):
-    def __init__(self, n_in, hidden):
-        super().__init__()
-        layers = []
-        prev = n_in
-        for h in hidden:
-            layers += [torch.nn.Linear(prev, h), torch.nn.ReLU()]
-            prev = h
-        layers += [torch.nn.Linear(prev, 1), torch.nn.Sigmoid()]
-        self.net = torch.nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.net(x)
+_pipeline = None
+_session = None
+_num_mean = None
+_num_std = None
+_n_numeric = None
+_available = None  # None = not yet attempted
 
 
 def _load():
+    import joblib
+    import onnxruntime as ort
+    import numpy as np  # noqa: F401 – needed by pipeline transforms
+
     pipeline = joblib.load(_PIPELINE_PATH)
-    ckpt = torch.load(_MODEL_PATH, map_location='cpu', weights_only=False)
-    n_in = ckpt['n_numeric'] + ckpt['n_onehot']
-    model = _WPNet(n_in, ckpt['hidden_layers'])
-    model.load_state_dict(ckpt['state_dict'], strict=False)
-    model.eval()
-    num_mean = ckpt['state_dict']['num_mean']
-    num_std = ckpt['state_dict']['num_std']
-    n_numeric = ckpt['n_numeric']
-    return pipeline, model, num_mean, num_std, n_numeric
+
+    # num_mean/num_std were stored in the torch checkpoint; load from companion file if present,
+    # otherwise fall back to the .pt file (requires torch) for a one-time extraction.
+    stats_path = os.path.join(_DIR, 'wp_model_stats.npz')
+    if os.path.exists(stats_path):
+        import numpy as np
+        stats = np.load(stats_path)
+        num_mean = stats['num_mean']
+        num_std = stats['num_std']
+        n_numeric = int(stats['n_numeric'])
+    else:
+        import torch
+        ckpt = torch.load(os.path.join(_DIR, 'wp_model_mlp.pt'), map_location='cpu', weights_only=False)
+        num_mean = ckpt['state_dict']['num_mean'].numpy()
+        num_std = ckpt['state_dict']['num_std'].numpy()
+        n_numeric = ckpt['n_numeric']
+        import numpy as np
+        np.savez(stats_path, num_mean=num_mean, num_std=num_std, n_numeric=np.array(n_numeric))
+
+    session = ort.InferenceSession(_ONNX_PATH, providers=['CPUExecutionProvider'])
+    return pipeline, session, num_mean, num_std, n_numeric
 
 
-try:
-    _pipeline, _model, _num_mean, _num_std, _n_numeric = _load()
-    _available = True
-except Exception:
-    _available = False
+def _ensure_loaded():
+    global _pipeline, _session, _num_mean, _num_std, _n_numeric, _available
+    if _available is not None:
+        return
+    try:
+        _pipeline, _session, _num_mean, _num_std, _n_numeric = _load()
+        _available = True
+    except Exception:
+        _available = False
 
 
 def available():
+    _ensure_loaded()
     return _available
 
 
 def predict_proba(row_dict):
     """Return home-win probability (0-1) for a single game-state row dict."""
+    import numpy as np
+    import pandas as pd
+    _ensure_loaded()
     row = pd.DataFrame([row_dict])
-    X_raw = _pipeline.transform(row)
-    X = torch.tensor(X_raw, dtype=torch.float32)
-    X[:, :_n_numeric] = (X[:, :_n_numeric] - _num_mean) / (_num_std + 1e-8)
-    with torch.no_grad():
-        return float(_model(X).item())
+    X_raw = _pipeline.transform(row).astype(np.float32)
+    X_raw[:, :_n_numeric] = (X_raw[:, :_n_numeric] - _num_mean) / (_num_std + 1e-8)
+    output = _session.run(None, {'input': X_raw})
+    return float(output[0][0][0])
 
 
 def _quarter_label(quarter):
@@ -76,6 +87,7 @@ def compute_wp_curve(plays, team_a, line=0):
     team_a: the home team name (scoreA = home score).
     Falls back to sigmoid formula if model unavailable.
     """
+    _ensure_loaded()
     if not _available:
         from server.win_probability import compute_wp_curve as sigmoid_curve
         return sigmoid_curve(plays)
@@ -86,7 +98,6 @@ def compute_wp_curve(plays, team_a, line=0):
     max_quarter = max(p.get('quarter', 4) for p in plays)
     total_seconds = 2880 if max_quarter <= 4 else 2880 + (max_quarter - 4) * 300
 
-    # Track running foul counts per period (reset each quarter)
     home_fouls_period = 0
     away_fouls_period = 0
     prev_quarter = None
@@ -126,14 +137,9 @@ def compute_wp_curve(plays, team_a, line=0):
         score_time_pressure = score_dif / (seconds_left + 1)
         points_total = score_a + score_b
 
-        # Bonus: 5+ fouls in a period triggers bonus (NBA rule)
         home_bonus = 1 if home_fouls_period >= 5 else 0
         away_bonus = 1 if away_fouls_period >= 5 else 0
-
-        # Possession: 1=home has ball, 0=away. Infer from team on this play.
         possession = 1 if is_home_team else 0
-
-        # Active free throw situations
         home_fts = 1 if (etype == 'free_throw' and is_home_team) else 0
         away_fts = 1 if (etype == 'free_throw' and not is_home_team) else 0
 
