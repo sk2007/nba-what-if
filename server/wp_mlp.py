@@ -1,55 +1,57 @@
 import os
+import numpy as np
 
 _DIR = os.path.dirname(os.path.dirname(__file__))
-_PIPELINE_PATH = os.path.join(_DIR, 'wp_model_feature_pipeline.joblib')
 _ONNX_PATH = os.path.join(_DIR, 'wp_model_mlp.onnx')
+_STATS_PATH = os.path.join(_DIR, 'wp_model_stats.npz')
 
-_pipeline = None
+# Numeric feature order must match pipeline training order
+_NUM_COLS = [
+    'periodSecondsLeft', 'secondsLeft', 'scoreDif', 'scoreTimePressure',
+    'pointsTotal', 'possession', 'homeFouls', 'awayFouls', 'homeBonus',
+    'awayBonus', 'homeFreeThrows', 'awayFreeThrows', 'homeEjections',
+    'awayEjections', 'line',
+]
+# OHE categories for 'quarter' in sklearn fit order
+_QUARTER_CATS = ['OT', 'Q1', 'Q2', 'Q3', 'Q4']
+
 _session = None
 _num_mean = None
 _num_std = None
-_n_numeric = None
 _available = None  # None = not yet attempted
 
 
 def _load():
-    import joblib
     import onnxruntime as ort
-    import numpy as np  # noqa: F401 – needed by pipeline transforms
-
-    pipeline = joblib.load(_PIPELINE_PATH)
-
-    # num_mean/num_std were stored in the torch checkpoint; load from companion file if present,
-    # otherwise fall back to the .pt file (requires torch) for a one-time extraction.
-    stats_path = os.path.join(_DIR, 'wp_model_stats.npz')
-    if os.path.exists(stats_path):
-        import numpy as np
-        stats = np.load(stats_path)
-        num_mean = stats['num_mean']
-        num_std = stats['num_std']
-        n_numeric = int(stats['n_numeric'])
-    else:
-        import torch
-        ckpt = torch.load(os.path.join(_DIR, 'wp_model_mlp.pt'), map_location='cpu', weights_only=False)
-        num_mean = ckpt['state_dict']['num_mean'].numpy()
-        num_std = ckpt['state_dict']['num_std'].numpy()
-        n_numeric = ckpt['n_numeric']
-        import numpy as np
-        np.savez(stats_path, num_mean=num_mean, num_std=num_std, n_numeric=np.array(n_numeric))
-
+    stats = np.load(_STATS_PATH)
+    num_mean = stats['num_mean'].astype(np.float32)
+    num_std = stats['num_std'].astype(np.float32)
     session = ort.InferenceSession(_ONNX_PATH, providers=['CPUExecutionProvider'])
-    return pipeline, session, num_mean, num_std, n_numeric
+    return session, num_mean, num_std
 
 
 def _ensure_loaded():
-    global _pipeline, _session, _num_mean, _num_std, _n_numeric, _available
+    global _session, _num_mean, _num_std, _available
     if _available is not None:
         return
     try:
-        _pipeline, _session, _num_mean, _num_std, _n_numeric = _load()
+        _session, _num_mean, _num_std = _load()
         _available = True
     except Exception:
         _available = False
+
+
+def _transform(row_dict):
+    """Replaces sklearn pipeline: passthrough numerics + OHE quarter."""
+    nums = np.array([[row_dict[c] for c in _NUM_COLS]], dtype=np.float32)
+    q = row_dict.get('quarter', 'Q4')
+    ohe = np.zeros((1, len(_QUARTER_CATS)), dtype=np.float32)
+    if q in _QUARTER_CATS:
+        ohe[0, _QUARTER_CATS.index(q)] = 1.0
+    X = np.concatenate([nums, ohe], axis=1)
+    n = len(_NUM_COLS)
+    X[:, :n] = (X[:, :n] - _num_mean) / (_num_std + 1e-8)
+    return X
 
 
 def available():
@@ -59,13 +61,9 @@ def available():
 
 def predict_proba(row_dict):
     """Return home-win probability (0-1) for a single game-state row dict."""
-    import numpy as np
-    import pandas as pd
     _ensure_loaded()
-    row = pd.DataFrame([row_dict])
-    X_raw = _pipeline.transform(row).astype(np.float32)
-    X_raw[:, :_n_numeric] = (X_raw[:, :_n_numeric] - _num_mean) / (_num_std + 1e-8)
-    output = _session.run(None, {'input': X_raw})
+    X = _transform(row_dict)
+    output = _session.run(None, {'input': X})
     return float(output[0][0][0])
 
 
@@ -75,10 +73,6 @@ def _quarter_label(quarter):
     if quarter == 3: return 'Q3'
     if quarter == 4: return 'Q4'
     return 'OT'
-
-
-def _period_total_seconds(quarter):
-    return 720 if quarter <= 4 else 300
 
 
 def compute_wp_curve(plays, team_a, line=0):
@@ -122,7 +116,7 @@ def compute_wp_curve(plays, team_a, line=0):
                 home_fouls_period += 1
             else:
                 away_fouls_period += 1
-        elif etype in ('ejection',):
+        elif etype == 'ejection':
             if is_home_team:
                 home_ejections += 1
             else:
@@ -137,25 +131,19 @@ def compute_wp_curve(plays, team_a, line=0):
         score_time_pressure = score_dif / (seconds_left + 1)
         points_total = score_a + score_b
 
-        home_bonus = 1 if home_fouls_period >= 5 else 0
-        away_bonus = 1 if away_fouls_period >= 5 else 0
-        possession = 1 if is_home_team else 0
-        home_fts = 1 if (etype == 'free_throw' and is_home_team) else 0
-        away_fts = 1 if (etype == 'free_throw' and not is_home_team) else 0
-
         row = {
             'periodSecondsLeft': clock_seconds,
             'secondsLeft': seconds_left,
             'scoreDif': score_dif,
             'scoreTimePressure': score_time_pressure,
             'pointsTotal': points_total,
-            'possession': possession,
+            'possession': 1 if is_home_team else 0,
             'homeFouls': home_fouls_period,
             'awayFouls': away_fouls_period,
-            'homeBonus': home_bonus,
-            'awayBonus': away_bonus,
-            'homeFreeThrows': home_fts,
-            'awayFreeThrows': away_fts,
+            'homeBonus': 1 if home_fouls_period >= 5 else 0,
+            'awayBonus': 1 if away_fouls_period >= 5 else 0,
+            'homeFreeThrows': 1 if (etype == 'free_throw' and is_home_team) else 0,
+            'awayFreeThrows': 1 if (etype == 'free_throw' and not is_home_team) else 0,
             'homeEjections': home_ejections,
             'awayEjections': away_ejections,
             'line': line,
