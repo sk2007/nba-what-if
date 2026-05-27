@@ -556,6 +556,7 @@ export default function PlayEditor({ season, seasonType }) {
   const [addedPlays, setAddedPlays] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [quarterFilter, setQuarterFilter] = useState('all');
+  const [perspectiveTeam, setPerspectiveTeam] = useState('A');
 
   useEffect(() => {
     setGameId(null);
@@ -572,6 +573,7 @@ export default function PlayEditor({ season, seasonType }) {
     setOverrides({});
     setAddedPlays([]);
     setShowAddForm(false);
+    setPerspectiveTeam('A');
     fetchPlayByPlay(gameId)
       .then((data) => { setGame(data); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
@@ -626,6 +628,15 @@ export default function PlayEditor({ season, seasonType }) {
     return parts.join(', ');
   })();
 
+  // Flip wp values when viewing from teamB's perspective
+  const flipCurve = (curve) =>
+    curve.map((pt) => ({ ...pt, wp: Math.round((100 - pt.wp) * 10) / 10 }));
+
+  const viewingTeam = perspectiveTeam === 'A' ? game?.teamA : game?.teamB;
+  const displayOriginal = perspectiveTeam === 'A' ? (game?.wpCurve ?? []) : flipCurve(game?.wpCurve ?? []);
+  const displayWhatIf  = perspectiveTeam === 'A' ? whatIfCurve : flipCurve(whatIfCurve);
+  const maxQuarter = game ? Math.max(...allPlays.map((p) => p.quarter), 4) : 4;
+
   return (
     <div>
       <div style={styles.selectorRow}>
@@ -647,22 +658,35 @@ export default function PlayEditor({ season, seasonType }) {
 
       {game && !loading && (
         <>
-          <p style={styles.subtitle}>
-            {game.teamA} Win Probability · {game.teamA} {game.plays.at(-1)?.scoreA ?? '—'} – {game.plays.at(-1)?.scoreB ?? '—'} {game.teamB}
-          </p>
+          <div style={styles.subtitleRow}>
+            <span style={styles.subtitle}>
+              {game.teamA} {game.plays.at(-1)?.scoreA ?? '—'} – {game.plays.at(-1)?.scoreB ?? '—'} {game.teamB}
+            </span>
+            <div style={styles.perspectiveRow}>
+              <label style={styles.perspectiveLabel}>Viewing:</label>
+              <select
+                value={perspectiveTeam}
+                onChange={(e) => setPerspectiveTeam(e.target.value)}
+                style={styles.perspectiveSelect}
+              >
+                <option value="A">{game.teamA}</option>
+                <option value="B">{game.teamB}</option>
+              </select>
+            </div>
+          </div>
           <div style={styles.chartsRow}>
-            <WinProbChart data={game.wpCurve} title="Original" color="#2563eb" teamA={game.teamA} teamB={game.teamB} maxQuarter={Math.max(...allPlays.map((p) => p.quarter), 4)} />
+            <WinProbChart data={displayOriginal} title="Original" color="#2563eb" teamA={viewingTeam} teamB={perspectiveTeam === 'A' ? game.teamB : game.teamA} maxQuarter={maxQuarter} />
             <WinProbChart
-              data={whatIfCurve}
+              data={displayWhatIf}
               title={hasChanges ? `What If (${changeLabel})` : 'What If (no edits yet)'}
               color="#dc2626"
-              teamA={game.teamA}
-              teamB={game.teamB}
-              maxQuarter={Math.max(...allPlays.map((p) => p.quarter), 4)}
+              teamA={viewingTeam}
+              teamB={perspectiveTeam === 'A' ? game.teamB : game.teamA}
+              maxQuarter={maxQuarter}
             />
           </div>
 
-          <ModelWinProb wpCurve={whatIfCurve} teamA={game.teamA} />
+          <ModelWinProb wpCurve={displayWhatIf} teamA={viewingTeam} />
 
           <div style={styles.playList}>
             <div style={styles.playListHeader}>
@@ -743,7 +767,11 @@ const styles = {
   resetBtn: { padding: '7px 14px', borderRadius: '6px', border: '1px solid #dc2626', background: '#fff', color: '#dc2626', fontSize: '13px', cursor: 'pointer', alignSelf: 'flex-end' },
   status: { color: '#888', fontSize: '14px', padding: '32px 0', textAlign: 'center' },
   errorText: { color: '#dc2626', fontSize: '13px', padding: '12px 0' },
-  subtitle: { fontSize: '13px', color: '#666', marginBottom: '16px' },
+  subtitleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' },
+  subtitle: { fontSize: '13px', color: '#666' },
+  perspectiveRow: { display: 'flex', alignItems: 'center', gap: '8px' },
+  perspectiveLabel: { fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' },
+  perspectiveSelect: { padding: '5px 10px', borderRadius: '6px', border: '1px solid #d0d0d0', fontSize: '13px', background: '#fafafa', cursor: 'pointer' },
   chartsRow: { display: 'flex', gap: '16px', marginBottom: '24px' },
   chartPanel: { flex: 1, background: '#fff', borderRadius: '8px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
   chartTitleRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
