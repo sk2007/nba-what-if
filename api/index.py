@@ -106,6 +106,66 @@ def kalshi_markets():
         return jsonify({'error': str(e)}), 503
 
 
+@app.post('/api/wp/recompute')
+def wp_recompute():
+    from server.wp_mlp import compute_wp_curve as mlp_curve, available as mlp_available
+    body = request.get_json(force=True, silent=True) or {}
+    team_a = body.get('teamA', '')
+    plays = body.get('plays', [])
+    overrides = body.get('overrides', {})
+
+    sorted_plays = sorted(plays, key=lambda p: p.get('gameSeconds', 0))
+
+    score_delta_a = 0
+    score_delta_b = 0
+    last_anchor_a = 0
+    last_anchor_b = 0
+    score_a = 0
+    score_b = 0
+    enriched = []
+
+    for play in sorted_plays:
+        if play.get('editable'):
+            event_num = str(play.get('eventNum', ''))
+            override = overrides.get(event_num)
+            orig_pts = play.get('shotPts', 0)
+            orig_made = orig_pts > 0
+            made = (override == 'Made') if override is not None else orig_made
+            actual_pts = _pts_for_type(play) if made else 0
+            orig_contribution = 0 if play.get('added') else orig_pts
+
+            if play.get('team') == team_a:
+                score_delta_a += actual_pts - orig_contribution
+            else:
+                score_delta_b += actual_pts - orig_contribution
+
+            score_a = play.get('scoreA', last_anchor_a) + score_delta_a
+            score_b = play.get('scoreB', last_anchor_b) + score_delta_b
+        else:
+            last_anchor_a = play.get('scoreA', last_anchor_a)
+            last_anchor_b = play.get('scoreB', last_anchor_b)
+            score_a = last_anchor_a + score_delta_a
+            score_b = last_anchor_b + score_delta_b
+
+        enriched.append({**play, 'scoreA': score_a, 'scoreB': score_b})
+
+    if mlp_available():
+        curve = mlp_curve(enriched, team_a)
+    else:
+        from server.win_probability import compute_wp_curve as sigmoid_curve
+        curve = sigmoid_curve(enriched)
+
+    return jsonify({'wpCurve': curve})
+
+
+def _pts_for_type(play):
+    etype = play.get('addedEventType', play.get('eventType', ''))
+    if etype == 'shot_3pt': return 3
+    if etype == 'shot_2pt': return 2
+    if etype in ('free_throw', 'freethrow'): return 1
+    return play.get('shotPts', 0) or 2
+
+
 PROP_SERIES = {'KXNBAPTS', 'KXNBAREB', 'KXNBAAST', 'KXNBA3PT', 'KXNBAPRA'}
 
 

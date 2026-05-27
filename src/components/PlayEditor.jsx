@@ -325,7 +325,7 @@ export default function PlayEditor({ season, seasonType }) {
         .catch(() => {});
     }, 300);
     return () => clearTimeout(wpDebounceRef.current);
-  }, [allPlays.length, addedPlays, overrides, game]);
+  }, [game, addedPlays, overrides]);
 
   const quarters = [...new Set(allPlays.map((p) => p.quarter))].sort((a, b) => a - b);
   const filteredPlays = (quarterFilter === 'all' ? allPlays : allPlays.filter((p) => p.quarter === Number(quarterFilter)))
