@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ReferenceLine, ResponsiveContainer,
+  Tooltip, ReferenceLine, ResponsiveContainer, Brush,
 } from 'recharts';
 import { fetchPlayByPlay, recomputeWpCurveRemote } from '../api/nbaApi';
 import GameSelector from './GameSelector';
@@ -62,6 +62,9 @@ const formStyles = {
   row: { display: 'flex', flexDirection: 'column', gap: '4px' },
   label: { fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' },
   select: { padding: '7px 10px', borderRadius: '6px', border: '1px solid #d0d0d0', fontSize: '13px', background: '#fafafa', cursor: 'pointer' },
+  quarterBtns: { display: 'flex', gap: '6px', flexWrap: 'wrap' },
+  quarterBtn: { padding: '5px 14px', borderRadius: '6px', border: '1px solid #d0d0d0', background: '#fafafa', fontSize: '13px', cursor: 'pointer', color: '#555' },
+  quarterBtnActive: { background: '#1a1a1a', color: '#fff', border: '1px solid #1a1a1a' },
   actions: { display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' },
   cancelBtn: { padding: '7px 16px', borderRadius: '6px', border: '1px solid #d0d0d0', background: '#fff', color: '#555', fontSize: '13px', cursor: 'pointer' },
   addBtn: { padding: '7px 16px', borderRadius: '6px', border: 'none', background: '#1a1a1a', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer' },
@@ -78,13 +81,26 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
   }
   for (const t of teams) playersByTeam[t].sort();
 
+  const playsAsc = [...allPlays].sort((a, b) => a.gameSeconds - b.gameSeconds);
+  const availableQuarters = [...new Set(playsAsc.map((p) => p.quarter))].sort((a, b) => a - b);
+  const maxQ = availableQuarters[availableQuarters.length - 1] ?? 4;
+
   const [team, setTeam] = useState(game.teamA);
   const [player, setPlayer] = useState(playersByTeam[game.teamA][0] || '');
   const [eventType, setEventType] = useState('shot_2pt');
   const [made, setMade] = useState(true);
-  // insertAfterIdx: index in allPlays (sorted asc) after which to insert; -1 = before all
-  const playsAsc = [...allPlays].sort((a, b) => a.gameSeconds - b.gameSeconds);
-  const [insertAfterIdx, setInsertAfterIdx] = useState(playsAsc.length - 1);
+  const [selectedQuarter, setSelectedQuarter] = useState(availableQuarters[0] ?? 1);
+
+  // Plays in the selected quarter, ascending
+  const quarterPlays = playsAsc.filter((p) => p.quarter === selectedQuarter);
+  const [insertAfterIdx, setInsertAfterIdx] = useState(-1);
+
+  // Reset insertAfterIdx to end of quarter when quarter changes
+  useEffect(() => {
+    const qPlays = playsAsc.filter((p) => p.quarter === selectedQuarter);
+    setInsertAfterIdx(qPlays.length > 0 ? qPlays.length - 1 : -1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedQuarter]);
 
   function handleTeamChange(t) {
     setTeam(t);
@@ -92,9 +108,14 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
   }
 
   function handleSubmit() {
-    const afterPlay = insertAfterIdx >= 0 ? playsAsc[insertAfterIdx] : null;
-    const beforePlay = insertAfterIdx + 1 < playsAsc.length ? playsAsc[insertAfterIdx + 1] : null;
-    // Place gameSeconds halfway between surrounding plays, or same as after-play + 1
+    // insertAfterIdx is relative to quarterPlays; map back to playsAsc index
+    const afterPlay = insertAfterIdx >= 0 ? quarterPlays[insertAfterIdx] : null;
+    // "before" is the next play after afterPlay in the full sorted array
+    const afterGlobalIdx = afterPlay ? playsAsc.indexOf(afterPlay) : -1;
+    const beforePlay = afterPlay
+      ? playsAsc[afterGlobalIdx + 1] ?? null
+      : quarterPlays[0] ?? null;
+
     let gameSeconds;
     if (afterPlay && beforePlay) {
       gameSeconds = Math.round((afterPlay.gameSeconds + beforePlay.gameSeconds) / 2);
@@ -107,7 +128,7 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
     }
 
     const refPlay = afterPlay || beforePlay || playsAsc[0];
-    const quarter = refPlay ? refPlay.quarter : 1;
+    const quarter = refPlay ? refPlay.quarter : selectedQuarter;
     const clock = refPlay ? refPlay.clock : '12:00';
 
     const scoring = isScoringType(eventType);
@@ -169,16 +190,32 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
         )}
 
         <div style={formStyles.row}>
+          <label style={formStyles.label}>Quarter</label>
+          <div style={formStyles.quarterBtns}>
+            {availableQuarters.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => setSelectedQuarter(q)}
+                style={{ ...formStyles.quarterBtn, ...(selectedQuarter === q ? formStyles.quarterBtnActive : {}) }}
+              >
+                {quarterLabel(q, maxQ)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={formStyles.row}>
           <label style={formStyles.label}>Insert after</label>
           <select
             value={insertAfterIdx}
             onChange={(e) => setInsertAfterIdx(Number(e.target.value))}
-            style={{ ...formStyles.select, maxWidth: '320px' }}
+            style={{ ...formStyles.select, maxWidth: '360px' }}
           >
-            <option value={-1}>— Beginning of game —</option>
-            {playsAsc.map((p, i) => (
+            <option value={-1}>— Start of {quarterLabel(selectedQuarter, maxQ)} —</option>
+            {quarterPlays.map((p, i) => (
               <option key={p.eventNum} value={i}>
-                Q{p.quarter} {p.clock} · {p.description?.slice(0, 55) || p.eventType}
+                {p.clock} · {p.description?.slice(0, 50) || p.eventType}
               </option>
             ))}
           </select>
@@ -193,71 +230,320 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
   );
 }
 
-const QUARTER_BOUNDARIES = [
-  { seconds: 0, label: 'Q1' },
-  { seconds: 720, label: 'Q2' },
-  { seconds: 1440, label: 'Q3' },
-  { seconds: 2160, label: 'Q4' },
-];
+const REGULATION_SECONDS = 2880;
 
-function WinProbChart({ data, title, color, teamA, teamB }) {
+// Build period boundaries for a game; maxQuarter > 4 adds OT periods
+function buildPeriodBoundaries(maxQuarter) {
+  const boundaries = [
+    { seconds: 0, label: 'Q1' },
+    { seconds: 720, label: 'Q2' },
+    { seconds: 1440, label: 'Q3' },
+    { seconds: 2160, label: 'Q4' },
+  ];
+  for (let q = 5; q <= maxQuarter; q++) {
+    boundaries.push({
+      seconds: REGULATION_SECONDS + (q - 5) * 300,
+      label: maxQuarter === 5 ? 'OT' : `OT${q - 4}`,
+    });
+  }
+  return boundaries;
+}
+
+function quarterLabel(q, maxQuarter) {
+  if (q <= 4) return `Q${q}`;
+  return maxQuarter === 5 ? 'OT' : `OT${q - 4}`;
+}
+
+function totalSecondsForMaxQuarter(maxQuarter) {
+  return maxQuarter <= 4 ? REGULATION_SECONDS : REGULATION_SECONDS + (maxQuarter - 4) * 300;
+}
+
+function makeFormatGameTick(boundaries, totalSeconds) {
+  return function formatGameTick(s) {
+    if (s === totalSeconds) return 'End';
+    const b = boundaries.slice().reverse().find((b) => s >= b.seconds);
+    return b ? b.label : '';
+  };
+}
+
+// Convert cumulative gameSeconds → "Q2 · 4:32 left" style string
+function gameSecondsToTimeLabel(gameSeconds, boundaries, totalSeconds) {
+  if (gameSeconds >= totalSeconds) return 'End of game';
+  const period = boundaries.slice().reverse().find((b) => gameSeconds >= b.seconds);
+  if (!period) return '';
+  const periodIdx = boundaries.indexOf(period);
+  const periodEnd = periodIdx + 1 < boundaries.length ? boundaries[periodIdx + 1].seconds : totalSeconds;
+  const periodDuration = periodEnd - period.seconds;
+  const elapsed = gameSeconds - period.seconds;
+  const remaining = periodDuration - elapsed;
+  const min = Math.floor(remaining / 60);
+  const sec = remaining % 60;
+  return `${period.label} · ${min}:${String(sec).padStart(2, '0')} left`;
+}
+
+// Kept as a fallback for the static QUARTER_BOUNDARIES reference in AddPlayForm
+const QUARTER_BOUNDARIES = buildPeriodBoundaries(4);
+
+// Shared chart content so both inline and expanded views use the same rendering
+function WinProbChartContent({ data, color, teamA, teamB, height, showBrush, domain, onBrushChange, maxQuarter }) {
+  const mq = maxQuarter ?? 4;
+  const boundaries = buildPeriodBoundaries(mq);
+  const totalSeconds = totalSecondsForMaxQuarter(mq);
+  const formatGameTick = makeFormatGameTick(boundaries, totalSeconds);
+
+  const xDomain = domain ?? [0, totalSeconds];
+  const allTicks = boundaries.map((b) => b.seconds).concat([totalSeconds]);
+  const visibleTicks = allTicks.filter((t) => t >= xDomain[0] && t <= xDomain[1]);
+
   return (
-    <div style={styles.chartPanel}>
-      <h3 style={styles.chartTitle}>{title}</h3>
-      <ResponsiveContainer width="100%" height={260}>
-        <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-          <XAxis
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: showBrush ? 32 : 16 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+        <XAxis
+          dataKey="gameSeconds"
+          type="number"
+          domain={xDomain}
+          label={!showBrush ? { value: 'Game Time (s)', position: 'insideBottom', offset: -8, fontSize: 12 } : undefined}
+          ticks={visibleTicks}
+          tickFormatter={formatGameTick}
+          tick={{ fontSize: 11 }}
+        />
+        <YAxis
+          domain={[0, 100]}
+          tickFormatter={(v) => `${v}%`}
+          tick={{ fontSize: 11 }}
+          width={42}
+        />
+        <Tooltip
+          content={({ active, payload, label }) => {
+            if (!active || !payload?.length) return null;
+            const d = payload[0].payload;
+            const timeStr = gameSecondsToTimeLabel(label, boundaries, totalSeconds);
+            const hasScore = d.scoreA !== undefined && d.scoreB !== undefined;
+            return (
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', lineHeight: '1.6' }}>
+                <div style={{ fontWeight: 600, marginBottom: '2px' }}>{timeStr}</div>
+                {hasScore && (
+                  <div style={{ color: '#555' }}>{teamA} {d.scoreA} – {d.scoreB} {teamB}</div>
+                )}
+                <div style={{ color }}>{teamA} Win Prob: {d.wp}%</div>
+              </div>
+            );
+          }}
+        />
+        {QUARTER_BOUNDARIES.map((b) => (
+          <ReferenceLine
+            key={b.seconds}
+            x={b.seconds}
+            stroke="#ccc"
+            strokeDasharray="4 2"
+            label={{ value: b.label, position: 'top', fontSize: 10, fill: '#999' }}
+          />
+        ))}
+        <ReferenceLine y={50} stroke="#ddd" strokeDasharray="4 2" />
+        <Line type="monotone" dataKey="wp" stroke={color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+        {showBrush && (
+          <Brush
             dataKey="gameSeconds"
-            type="number"
-            domain={[0, 'dataMax']}
-            label={{ value: 'Game Time (s)', position: 'insideBottom', offset: -8, fontSize: 12 }}
-            ticks={[0, 720, 1440, 2160, 2880]}
+            height={24}
+            stroke={color}
+            fill="#f9fafb"
+            onChange={(range) => {
+              if (!onBrushChange || range.startIndex == null) return;
+              const s = data[range.startIndex]?.gameSeconds ?? 0;
+              const e = data[range.endIndex]?.gameSeconds ?? GAME_TOTAL_SECONDS;
+              onBrushChange([s, e]);
+            }}
             tickFormatter={(s) => {
               const q = QUARTER_BOUNDARIES.slice().reverse().find((b) => s >= b.seconds);
               return q ? q.label : '';
             }}
-            tick={{ fontSize: 11 }}
           />
-          <YAxis
-            domain={[0, 100]}
-            tickFormatter={(v) => `${v}%`}
-            tick={{ fontSize: 11 }}
-            width={42}
+        )}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+// Fullscreen expanded modal for a single chart
+function ChartModal({ data, title, color, teamA, teamB, onClose, maxQuarter }) {
+  const totalSeconds = totalSecondsForMaxQuarter(maxQuarter ?? 4);
+  const [domain, setDomain] = useState([0, totalSeconds]);
+  const chartContainerRef = useRef(null);
+  // Track cursor x-fraction (0–1) over the chart area for zoom centering
+  const cursorFracRef = useRef(0.5);
+
+  const isZoomed = domain[0] !== 0 || domain[1] !== totalSeconds;
+
+  // Close on Escape, reset zoom on double-click
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // Trackpad/wheel pinch-to-zoom on the chart container
+  useEffect(() => {
+    const el = chartContainerRef.current;
+    if (!el) return;
+
+    function onMouseMove(e) {
+      const rect = el.getBoundingClientRect();
+      // The Recharts left margin (YAxis width) is ~42px; right margin ~16px
+      const leftOffset = 42;
+      const rightOffset = 16;
+      const plotWidth = rect.width - leftOffset - rightOffset;
+      const x = e.clientX - rect.left - leftOffset;
+      cursorFracRef.current = Math.max(0, Math.min(1, x / plotWidth));
+    }
+
+    function onWheel(e) {
+      const isPinch = e.ctrlKey || e.metaKey;
+      const isHorizontal = !isPinch && Math.abs(e.deltaX) > Math.abs(e.deltaY);
+
+      if (!isPinch && !isHorizontal) return;
+      e.preventDefault();
+
+      if (isPinch) {
+        setDomain((prev) => {
+          const span = prev[1] - prev[0];
+          // deltaY > 0 → zoom out, < 0 → zoom in
+          const zoomFactor = e.deltaY > 0 ? 1.15 : 0.87;
+          const newSpan = Math.min(totalSeconds, Math.max(60, span * zoomFactor));
+          const center = prev[0] + span * cursorFracRef.current;
+          let newStart = center - newSpan * cursorFracRef.current;
+          let newEnd = newStart + newSpan;
+          if (newStart < 0) { newStart = 0; newEnd = newSpan; }
+          if (newEnd > totalSeconds) { newEnd = totalSeconds; newStart = totalSeconds - newSpan; }
+          return [Math.round(newStart), Math.round(newEnd)];
+        });
+      } else {
+        // Horizontal pan: deltaX > 0 → scroll right (forward in time)
+        setDomain((prev) => {
+          const span = prev[1] - prev[0];
+          // Scale pan speed proportionally to current zoom level
+          const panAmount = (e.deltaX / 300) * span;
+          let newStart = prev[0] + panAmount;
+          let newEnd = prev[1] + panAmount;
+          if (newStart < 0) { newStart = 0; newEnd = span; }
+          if (newEnd > totalSeconds) { newEnd = totalSeconds; newStart = totalSeconds - span; }
+          return [Math.round(newStart), Math.round(newEnd)];
+        });
+      }
+    }
+
+    el.addEventListener('mousemove', onMouseMove);
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('mousemove', onMouseMove);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, []);
+
+  return (
+    <div style={chartModalStyles.overlay} onClick={onClose}>
+      <div style={chartModalStyles.panel} onClick={(e) => e.stopPropagation()}>
+        <div style={chartModalStyles.header}>
+          <span style={chartModalStyles.title}>{title}</span>
+          <div style={chartModalStyles.headerRight}>
+            <span style={chartModalStyles.hint}>Pinch to zoom · swipe left/right to pan · drag range bar · hover for details</span>
+            {isZoomed && (
+              <button
+                onClick={() => setDomain([0, totalSeconds])}
+                style={{ ...chartModalStyles.closeBtn, borderColor: color, color }}
+              >
+                Reset zoom
+              </button>
+            )}
+            <button onClick={onClose} style={chartModalStyles.closeBtn}>✕</button>
+          </div>
+        </div>
+        <div style={chartModalStyles.body} ref={chartContainerRef}>
+          <WinProbChartContent
+            data={data}
+            color={color}
+            teamA={teamA}
+            teamB={teamB}
+            height={420}
+            showBrush
+            domain={domain}
+            onBrushChange={setDomain}
+            maxQuarter={maxQuarter}
           />
-          <Tooltip
-            content={({ active, payload, label }) => {
-              if (!active || !payload?.length) return null;
-              const d = payload[0].payload;
-              const min = Math.floor(label / 60);
-              const sec = label % 60;
-              const timeStr = `${min}:${String(sec).padStart(2, '0')}`;
-              const hasScore = d.scoreA !== undefined && d.scoreB !== undefined;
-              return (
-                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', lineHeight: '1.6' }}>
-                  <div style={{ fontWeight: 600, marginBottom: '2px' }}>{timeStr}</div>
-                  {hasScore && (
-                    <div style={{ color: '#555' }}>{teamA} {d.scoreA} – {d.scoreB} {teamB}</div>
-                  )}
-                  <div style={{ color }}>{teamA} Win Prob: {d.wp}%</div>
-                </div>
-              );
-            }}
-          />
-          {QUARTER_BOUNDARIES.map((b) => (
-            <ReferenceLine
-              key={b.seconds}
-              x={b.seconds}
-              stroke="#ccc"
-              strokeDasharray="4 2"
-              label={{ value: b.label, position: 'top', fontSize: 10, fill: '#999' }}
-            />
-          ))}
-          <ReferenceLine y={50} stroke="#ddd" strokeDasharray="4 2" />
-          <Line type="monotone" dataKey="wp" stroke={color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-        </LineChart>
-      </ResponsiveContainer>
+        </div>
+        <div style={chartModalStyles.footer}>
+          <span style={{ color: '#999', fontSize: '12px' }}>{teamA} win probability over game time</span>
+        </div>
+      </div>
     </div>
+  );
+}
+
+const chartModalStyles = {
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+  },
+  panel: {
+    background: '#fff', borderRadius: '12px', width: 'min(92vw, 900px)',
+    boxShadow: '0 16px 64px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column',
+  },
+  header: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '18px 24px 0', gap: '12px',
+  },
+  title: { fontSize: '16px', fontWeight: '700', color: '#1a1a1a' },
+  headerRight: { display: 'flex', alignItems: 'center', gap: '16px' },
+  hint: { fontSize: '11px', color: '#aaa' },
+  closeBtn: {
+    padding: '4px 10px', borderRadius: '6px', border: '1px solid #e0e0e0',
+    background: '#fafafa', color: '#555', fontSize: '13px', cursor: 'pointer',
+  },
+  body: { padding: '16px 24px 8px' },
+  footer: { padding: '0 24px 16px' },
+};
+
+function WinProbChart({ data, title, color, teamA, teamB, maxQuarter }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <div style={styles.chartPanel}>
+        <div style={styles.chartTitleRow}>
+          <h3 style={styles.chartTitle}>{title}</h3>
+          <button
+            onClick={() => setExpanded(true)}
+            style={styles.expandBtn}
+            title="Expand chart"
+          >
+            ⤢ Expand
+          </button>
+        </div>
+        <WinProbChartContent
+          data={data}
+          color={color}
+          teamA={teamA}
+          teamB={teamB}
+          height={260}
+          showBrush={false}
+          maxQuarter={maxQuarter}
+        />
+      </div>
+
+      {expanded && (
+        <ChartModal
+          data={data}
+          title={title}
+          color={color}
+          teamA={teamA}
+          teamB={teamB}
+          onClose={() => setExpanded(false)}
+          maxQuarter={maxQuarter}
+        />
+      )}
+    </>
   );
 }
 
@@ -365,13 +651,14 @@ export default function PlayEditor({ season, seasonType }) {
             {game.teamA} Win Probability · {game.teamA} {game.plays.at(-1)?.scoreA ?? '—'} – {game.plays.at(-1)?.scoreB ?? '—'} {game.teamB}
           </p>
           <div style={styles.chartsRow}>
-            <WinProbChart data={game.wpCurve} title="Original" color="#2563eb" teamA={game.teamA} teamB={game.teamB} />
+            <WinProbChart data={game.wpCurve} title="Original" color="#2563eb" teamA={game.teamA} teamB={game.teamB} maxQuarter={Math.max(...allPlays.map((p) => p.quarter), 4)} />
             <WinProbChart
               data={whatIfCurve}
               title={hasChanges ? `What If (${changeLabel})` : 'What If (no edits yet)'}
               color="#dc2626"
               teamA={game.teamA}
               teamB={game.teamB}
+              maxQuarter={Math.max(...allPlays.map((p) => p.quarter), 4)}
             />
           </div>
 
@@ -459,7 +746,13 @@ const styles = {
   subtitle: { fontSize: '13px', color: '#666', marginBottom: '16px' },
   chartsRow: { display: 'flex', gap: '16px', marginBottom: '24px' },
   chartPanel: { flex: 1, background: '#fff', borderRadius: '8px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
-  chartTitle: { fontSize: '15px', fontWeight: '600', marginBottom: '12px', color: '#1a1a1a' },
+  chartTitleRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
+  chartTitle: { fontSize: '15px', fontWeight: '600', color: '#1a1a1a' },
+  expandBtn: {
+    padding: '3px 10px', borderRadius: '5px', border: '1px solid #d0d0d0',
+    background: '#fafafa', color: '#555', fontSize: '11px', cursor: 'pointer',
+    letterSpacing: '0.02em',
+  },
   playList: { background: '#fff', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
   playListHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
   playListTitle: { fontSize: '14px', fontWeight: '600', color: '#1a1a1a' },
