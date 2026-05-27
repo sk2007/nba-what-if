@@ -318,14 +318,16 @@ export default function PlayEditor({ season, seasonType }) {
   const wpDebounceRef = useRef(null);
   useEffect(() => {
     if (!game) { setWhatIfCurve([]); return; }
+    if (!hasChanges) { setWhatIfCurve(game.wpCurve); return; }
     if (wpDebounceRef.current) clearTimeout(wpDebounceRef.current);
+    const plays = [...game.plays, ...addedPlays];
     wpDebounceRef.current = setTimeout(() => {
-      recomputeWpCurveRemote(allPlays, overrides, game.teamA)
+      recomputeWpCurveRemote(plays, overrides, game.teamA)
         .then(setWhatIfCurve)
         .catch(() => {});
     }, 300);
     return () => clearTimeout(wpDebounceRef.current);
-  }, [game, addedPlays, overrides]);
+  }, [game, addedPlays, overrides, hasChanges]);
 
   const quarters = [...new Set(allPlays.map((p) => p.quarter))].sort((a, b) => a - b);
   const filteredPlays = (quarterFilter === 'all' ? allPlays : allPlays.filter((p) => p.quarter === Number(quarterFilter)))
