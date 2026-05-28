@@ -156,6 +156,103 @@ def _pts_for_type(play):
     return play.get('shotPts', 0) or 2
 
 
+@app.get('/api/clutch')
+def clutch_index():
+    season = request.args.get('season')
+    season_type = request.args.get('season_type', 'Regular Season')
+    team = request.args.get('team')
+    if not season or not team:
+        return jsonify({'error': 'season and team are required'}), 400
+
+    try:
+        all_games = get_games(season, season_type)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+    team_games = [g for g in all_games if team in (g['teamA'], g['teamB'])]
+
+    CRUNCH_CLOCK = 300   # ≤5 min remaining in quarter
+    CRUNCH_MARGIN = 5    # within 5 points
+
+    player_stats = {}
+    errors = []
+
+    for game in team_games:
+        try:
+            pbp = get_play_by_play(game['gameId'])
+        except Exception as e:
+            errors.append(str(e))
+            continue
+
+        plays = pbp.get('plays', [])
+        team_a = pbp.get('teamA', '')
+        sorted_curve = sorted(pbp.get('wpCurve', []), key=lambda p: p['gameSeconds'])
+        if not sorted_curve:
+            continue
+
+        is_home = (team == team_a)
+
+        def wp_before_play(gs):
+            result = sorted_curve[0]['wp']
+            for pt in sorted_curve:
+                if pt['gameSeconds'] < gs:
+                    result = pt['wp']
+                else:
+                    break
+            return result
+
+        def wp_at_play(gs):
+            result = sorted_curve[0]['wp']
+            for pt in sorted_curve:
+                if pt['gameSeconds'] <= gs:
+                    result = pt['wp']
+                else:
+                    break
+            return result
+
+        for play in plays:
+            if not play.get('player'):
+                continue
+            if play.get('team') != team:
+                continue
+            if not play.get('editable'):
+                continue
+            quarter = play.get('quarter', 0)
+            if quarter < 4:
+                continue
+            if play.get('clockSeconds', 999) > CRUNCH_CLOCK:
+                continue
+            if abs(play.get('scoreA', 0) - play.get('scoreB', 0)) > CRUNCH_MARGIN:
+                continue
+
+            gs = play.get('gameSeconds', 0)
+            delta = wp_at_play(gs) - wp_before_play(gs)
+            if not is_home:
+                delta = -delta
+
+            player = play['player']
+            if player not in player_stats:
+                player_stats[player] = {'wpAdded': 0.0, 'plays': 0, 'games': set()}
+            player_stats[player]['wpAdded'] += delta
+            player_stats[player]['plays'] += 1
+            player_stats[player]['games'].add(game['gameId'])
+
+    results = []
+    for player, stats in player_stats.items():
+        if stats['plays'] < 3:
+            continue
+        results.append({
+            'player': player,
+            'wpAdded': round(stats['wpAdded'], 1),
+            'avgWpAdded': round(stats['wpAdded'] / stats['plays'], 2),
+            'plays': stats['plays'],
+            'games': len(stats['games']),
+        })
+
+    results.sort(key=lambda r: r['wpAdded'], reverse=True)
+    return jsonify({'players': results, 'gamesAnalyzed': len(team_games), 'errors': len(errors)})
+
+
 KALSHI_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
 KALSHI_HEADERS = {'accept': 'application/json'}
 

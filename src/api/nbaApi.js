@@ -1,3 +1,18 @@
+async function withRetry(fn, maxAttempts = 3) {
+  let lastErr;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 300 * 2 ** attempt));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function apiFetch(path) {
   const res = await fetch(path);
   if (!res.ok) {
@@ -17,7 +32,7 @@ export function fetchGames(season, seasonType) {
 }
 
 export function fetchPlayByPlay(gameId) {
-  return apiFetch(`/api/games/${gameId}/playbyplay`);
+  return withRetry(() => apiFetch(`/api/games/${gameId}/playbyplay`));
 }
 
 
@@ -50,15 +65,17 @@ export async function fetchKalshiProps(gameSuffix, series) {
   return data.markets || [];
 }
 
-export async function recomputeWpCurveRemote(plays, overrides, teamA) {
-  const res = await fetch('/api/wp/recompute', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ teamA, plays, overrides }),
+export function recomputeWpCurveRemote(plays, overrides, teamA) {
+  return withRetry(async () => {
+    const res = await fetch('/api/wp/recompute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teamA, plays, overrides }),
+    });
+    if (!res.ok) throw new Error(`WP recompute HTTP ${res.status}`);
+    const data = await res.json();
+    return data.wpCurve;
   });
-  if (!res.ok) throw new Error(`WP recompute HTTP ${res.status}`);
-  const data = await res.json();
-  return data.wpCurve;
 }
 
 export function recomputeWpCurve(plays, overrides, teamA, totalSeconds = 2880) {

@@ -144,6 +144,14 @@ def _fetch_play_by_play(game_id):
     team_b = f"{away['teamCity']} {away['teamName']}"
     home_id = home["teamId"]
 
+    # Build nameI → full name map from boxscore roster
+    name_map = {}
+    for p in home.get("players", []) + away.get("players", []):
+        name_i = p.get("nameI", "")
+        full = p.get("name", "") or f"{p.get('firstName', '')} {p.get('familyName', '')}".strip()
+        if name_i and full:
+            name_map[name_i] = full
+
     plays = []
     score_a = 0
     score_b = 0
@@ -171,7 +179,8 @@ def _fetch_play_by_play(game_id):
         team_id = action.get("teamId")
         team_full = team_a if team_id == home_id else (team_b if team_id else None)
 
-        player = action.get("playerNameI") or action.get("playerName") or None
+        name_i = action.get("playerNameI") or None
+        player = name_map.get(name_i, name_i) if name_i else None
 
         play = {
             "eventNum": action.get("actionNumber", 0),

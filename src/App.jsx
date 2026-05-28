@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import SeasonSelector from './components/SeasonSelector';
 import PlayEditor from './components/PlayEditor';
 import KalshiMarkets from './components/KalshiMarkets';
+import GameComparison from './components/GameComparison';
+import ClutchIndex from './components/ClutchIndex';
+import { fetchGames } from './api/nbaApi';
 import './App.css';
 
-const TABS = ['Play Editor', 'Kalshi Markets'];
+const TABS = ['Play Editor', 'Game Comparison', 'Clutch Index', 'Kalshi Markets'];
 const KALSHI_PASSWORD = 'Lebron23';
 const KALSHI_UNLOCK_KEY = 'kalshi-markets-unlocked';
 
@@ -116,11 +119,19 @@ function KalshiPasswordGate({ onUnlock }) {
 
 export default function App() {
   const [season, setSeason] = useState('2024-25');
-  const [seasonType, setSeasonType] = useState('Regular Season');
   const [tab, setTab] = useState('Play Editor');
   const [kalshiUnlocked, setKalshiUnlocked] = useState(
     () => sessionStorage.getItem(KALSHI_UNLOCK_KEY) === 'true'
   );
+  // Shared games list fetched once per season, used by both GameComparison and ClutchIndex
+  const [games, setGames] = useState([]);
+
+  useEffect(() => {
+    setGames([]);
+    fetchGames(season, 'Regular Season')
+      .then((data) => setGames(data.games ?? []))
+      .catch(() => {});
+  }, [season]);
 
   return (
     <div>
@@ -133,18 +144,29 @@ export default function App() {
           <button key={t} style={tabStyle(tab === t)} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
+
       {tab === 'Play Editor' && (
         <>
-          <SeasonSelector
-            season={season}
-            seasonType={seasonType}
-            onSeasonChange={setSeason}
-            onSeasonTypeChange={setSeasonType}
-          />
-          <PlayEditor season={season} seasonType={seasonType} />
+          <SeasonSelector season={season} onSeasonChange={setSeason} />
+          <PlayEditor season={season} seasonType="Regular Season" />
         </>
       )}
-{tab === 'Kalshi Markets' && (
+
+      {tab === 'Game Comparison' && (
+        <>
+          <SeasonSelector season={season} onSeasonChange={setSeason} />
+          <GameComparison season={season} seasonType="Regular Season" />
+        </>
+      )}
+
+      {tab === 'Clutch Index' && (
+        <>
+          <SeasonSelector season={season} onSeasonChange={setSeason} />
+          <ClutchIndex season={season} seasonType="Regular Season" games={games} />
+        </>
+      )}
+
+      {tab === 'Kalshi Markets' && (
         kalshiUnlocked
           ? <KalshiMarkets />
           : <KalshiPasswordGate onUnlock={() => setKalshiUnlocked(true)} />

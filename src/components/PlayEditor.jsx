@@ -284,8 +284,63 @@ function gameSecondsToTimeLabel(gameSeconds, boundaries, totalSeconds) {
 // Kept as a fallback for the static QUARTER_BOUNDARIES reference in AddPlayForm
 const QUARTER_BOUNDARIES = buildPeriodBoundaries(4);
 
+// Find the top N momentum swings in a wpCurve over a sliding window of windowSecs seconds.
+// Returns array of { startSeconds, endSeconds, startWp, endWp, delta, peakSeconds }.
+function detectMomentumSwings(wpCurve, { topN = 3, windowSecs = 120, minDelta = 15 } = {}) {
+  if (wpCurve.length < 2) return [];
+  const swings = [];
+  for (let i = 0; i < wpCurve.length; i++) {
+    const start = wpCurve[i];
+    for (let j = i + 1; j < wpCurve.length; j++) {
+      const end = wpCurve[j];
+      if (end.gameSeconds - start.gameSeconds > windowSecs) break;
+      const delta = Math.abs(end.wp - start.wp);
+      if (delta >= minDelta) {
+        swings.push({ startSeconds: start.gameSeconds, endSeconds: end.gameSeconds, startWp: start.wp, endWp: end.wp, delta });
+      }
+    }
+  }
+  // Deduplicate overlapping swings: keep only non-overlapping top swings
+  swings.sort((a, b) => b.delta - a.delta);
+  const kept = [];
+  for (const s of swings) {
+    const overlaps = kept.some(
+      (k) => s.startSeconds < k.endSeconds && s.endSeconds > k.startSeconds
+    );
+    if (!overlaps) {
+      kept.push(s);
+      if (kept.length === topN) break;
+    }
+  }
+  return kept;
+}
+
+// Compute WP impact for each play: delta between its wpCurve entry and the previous one.
+// Returns a Map<eventNum, deltaWp> where deltaWp is signed (positive = helped teamA).
+function computePlayImpacts(plays, wpCurve) {
+  const impacts = new Map();
+  if (!wpCurve.length) return impacts;
+  // Build a lookup: gameSeconds → wp (last entry wins for ties)
+  const wpBySeconds = new Map();
+  for (const pt of wpCurve) wpBySeconds.set(pt.gameSeconds, pt.wp);
+
+  // Sort curve ascending for prev-point lookup
+  const sorted = [...wpCurve].sort((a, b) => a.gameSeconds - b.gameSeconds);
+
+  for (const play of plays) {
+    // Find the curve point at or just after this play's gameSeconds
+    const idx = sorted.findIndex((pt) => pt.gameSeconds >= play.gameSeconds);
+    if (idx <= 0) continue;
+    const after = sorted[idx];
+    const before = sorted[idx - 1];
+    const delta = Math.round((after.wp - before.wp) * 10) / 10;
+    impacts.set(play.eventNum, delta);
+  }
+  return impacts;
+}
+
 // Shared chart content so both inline and expanded views use the same rendering
-function WinProbChartContent({ data, color, teamA, teamB, height, showBrush, domain, onBrushChange, maxQuarter }) {
+function WinProbChartContent({ data, color, teamA, teamB, height, showBrush, domain, onBrushChange, maxQuarter, swings }) {
   const mq = maxQuarter ?? 4;
   const boundaries = buildPeriodBoundaries(mq);
   const totalSeconds = totalSecondsForMaxQuarter(mq);
@@ -341,6 +396,23 @@ function WinProbChartContent({ data, color, teamA, teamB, height, showBrush, dom
           />
         ))}
         <ReferenceLine y={50} stroke="#ddd" strokeDasharray="4 2" />
+        {(swings ?? []).map((sw, i) => {
+          const isUp = sw.endWp > sw.startWp;
+          const swingColor = isUp ? '#16a34a' : '#dc2626';
+          const midSeconds = Math.round((sw.startSeconds + sw.endSeconds) / 2);
+          const labelWp = isUp ? Math.min(sw.endWp + 6, 95) : Math.max(sw.endWp - 6, 5);
+          const sign = isUp ? '+' : '−';
+          return (
+            <ReferenceLine
+              key={`swing-${i}`}
+              x={midSeconds}
+              stroke={swingColor}
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
+              label={{ value: `${sign}${sw.delta}%`, position: 'insideTop', fontSize: 9, fill: swingColor, fontWeight: 700 }}
+            />
+          );
+        })}
         <Line type="monotone" dataKey="wp" stroke={color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
         {showBrush && (
           <Brush
@@ -366,7 +438,7 @@ function WinProbChartContent({ data, color, teamA, teamB, height, showBrush, dom
 }
 
 // Fullscreen expanded modal for a single chart
-function ChartModal({ data, title, color, teamA, teamB, onClose, maxQuarter }) {
+function ChartModal({ data, title, color, teamA, teamB, onClose, maxQuarter, swings }) {
   const totalSeconds = totalSecondsForMaxQuarter(maxQuarter ?? 4);
   const [domain, setDomain] = useState([0, totalSeconds]);
   const chartContainerRef = useRef(null);
@@ -471,6 +543,7 @@ function ChartModal({ data, title, color, teamA, teamB, onClose, maxQuarter }) {
             domain={domain}
             onBrushChange={setDomain}
             maxQuarter={maxQuarter}
+            swings={swings}
           />
         </div>
         <div style={chartModalStyles.footer}>
@@ -505,7 +578,7 @@ const chartModalStyles = {
   footer: { padding: '0 24px 16px' },
 };
 
-function WinProbChart({ data, title, color, teamA, teamB, maxQuarter }) {
+function WinProbChart({ data, title, color, teamA, teamB, maxQuarter, swings }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -529,6 +602,7 @@ function WinProbChart({ data, title, color, teamA, teamB, maxQuarter }) {
           height={260}
           showBrush={false}
           maxQuarter={maxQuarter}
+          swings={swings}
         />
       </div>
 
@@ -541,11 +615,54 @@ function WinProbChart({ data, title, color, teamA, teamB, maxQuarter }) {
           teamB={teamB}
           onClose={() => setExpanded(false)}
           maxQuarter={maxQuarter}
+          swings={swings}
         />
       )}
     </>
   );
 }
+
+function TopImpactsPanel({ plays, impacts, viewingTeam }) {
+  if (!impacts.size) return null;
+  const ranked = plays
+    .map((p) => ({ play: p, impact: impacts.get(p.eventNum) }))
+    .filter((x) => x.impact != null && x.impact !== 0)
+    .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact))
+    .slice(0, 5);
+  if (!ranked.length) return null;
+
+  return (
+    <div style={topImpactStyles.panel}>
+      <div style={topImpactStyles.title}>Top 5 Most Impactful Plays</div>
+      {ranked.map(({ play, impact }, i) => {
+        const positive = impact > 0;
+        const color = positive ? '#16a34a' : '#dc2626';
+        return (
+          <div key={play.eventNum} style={topImpactStyles.row}>
+            <span style={topImpactStyles.rank}>#{i + 1}</span>
+            <span style={topImpactStyles.time}>Q{play.quarter} {play.clock}</span>
+            <span style={topImpactStyles.desc}>{play.description || play.eventType}</span>
+            <span style={{ ...topImpactStyles.impact, color }}>
+              {positive ? '+' : ''}{impact}%
+            </span>
+          </div>
+        );
+      })}
+      <div style={topImpactStyles.footer}>WP impact for {viewingTeam}</div>
+    </div>
+  );
+}
+
+const topImpactStyles = {
+  panel: { background: '#fff', borderRadius: '8px', padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '16px' },
+  title: { fontSize: '13px', fontWeight: '700', color: '#1a1a1a', marginBottom: '10px' },
+  row: { display: 'flex', alignItems: 'center', gap: '10px', padding: '5px 0', borderBottom: '1px solid #f5f5f5' },
+  rank: { fontSize: '11px', fontWeight: '700', color: '#bbb', width: '24px', flexShrink: 0 },
+  time: { fontSize: '11px', color: '#888', width: '72px', flexShrink: 0 },
+  desc: { flex: 1, fontSize: '12px', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  impact: { fontSize: '13px', fontWeight: '700', width: '52px', textAlign: 'right', flexShrink: 0 },
+  footer: { fontSize: '11px', color: '#bbb', marginTop: '8px' },
+};
 
 export default function PlayEditor({ season, seasonType }) {
   const [gameId, setGameId] = useState(null);
@@ -637,6 +754,12 @@ export default function PlayEditor({ season, seasonType }) {
   const displayWhatIf  = perspectiveTeam === 'A' ? whatIfCurve : flipCurve(whatIfCurve);
   const maxQuarter = game ? Math.max(...allPlays.map((p) => p.quarter), 4) : 4;
 
+  const originalSwings = detectMomentumSwings(displayOriginal);
+  const whatIfSwings = detectMomentumSwings(displayWhatIf);
+  // Impact scores computed against the active (what-if or original) curve
+  const activeCurve = hasChanges ? displayWhatIf : displayOriginal;
+  const playImpacts = computePlayImpacts(allPlays, activeCurve);
+
   return (
     <div>
       <div style={styles.selectorRow}>
@@ -675,7 +798,7 @@ export default function PlayEditor({ season, seasonType }) {
             </div>
           </div>
           <div style={styles.chartsRow}>
-            <WinProbChart data={displayOriginal} title="Original" color="#2563eb" teamA={viewingTeam} teamB={perspectiveTeam === 'A' ? game.teamB : game.teamA} maxQuarter={maxQuarter} />
+            <WinProbChart data={displayOriginal} title="Original" color="#2563eb" teamA={viewingTeam} teamB={perspectiveTeam === 'A' ? game.teamB : game.teamA} maxQuarter={maxQuarter} swings={originalSwings} />
             <WinProbChart
               data={displayWhatIf}
               title={hasChanges ? `What If (${changeLabel})` : 'What If (no edits yet)'}
@@ -683,10 +806,13 @@ export default function PlayEditor({ season, seasonType }) {
               teamA={viewingTeam}
               teamB={perspectiveTeam === 'A' ? game.teamB : game.teamA}
               maxQuarter={maxQuarter}
+              swings={whatIfSwings}
             />
           </div>
 
           <ModelWinProb wpCurve={displayWhatIf} teamA={viewingTeam} />
+
+          <TopImpactsPanel plays={allPlays} impacts={playImpacts} viewingTeam={viewingTeam} />
 
           <div style={styles.playList}>
             <div style={styles.playListHeader}>
@@ -717,10 +843,15 @@ export default function PlayEditor({ season, seasonType }) {
                 <span style={{ width: 80 }}>Time</span>
                 <span style={{ flex: 1 }}>Description</span>
                 <span style={{ width: 100 }}>Outcome</span>
+                <span style={{ width: 72, textAlign: 'right' }}>WP Impact</span>
               </div>
               {filteredPlays.map((play) => {
                 const isEdited = overrides[play.eventNum] !== undefined;
                 const currentResult = overrides[play.eventNum] ?? (play.shotPts > 0 ? 'Made' : 'Missed');
+                const impact = playImpacts.get(play.eventNum);
+                const impactAbs = impact != null ? Math.abs(impact) : 0;
+                const impactColor = impact == null ? '#ccc' : impact > 0 ? '#16a34a' : impact < 0 ? '#dc2626' : '#999';
+                const impactLabel = impact == null ? '—' : `${impact > 0 ? '+' : ''}${impact}%`;
                 return (
                   <div key={play.eventNum} style={{ ...styles.tableRow, ...(play.added ? styles.tableRowAdded : isEdited ? styles.tableRowEdited : {}) }}>
                     <span style={styles.timeCell}>
@@ -741,6 +872,9 @@ export default function PlayEditor({ season, seasonType }) {
                       ) : (
                         <span style={styles.nonEditable}>—</span>
                       )}
+                    </span>
+                    <span style={{ width: 72, textAlign: 'right', fontSize: '12px', fontWeight: impactAbs >= 5 ? '700' : '400', color: impactColor }}>
+                      {impactLabel}
                     </span>
                   </div>
                 );
