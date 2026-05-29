@@ -113,7 +113,7 @@ export default function ClutchIndex({ season, seasonType, games }) {
 
       {loading && (
         <Spinner
-          message={`Analyzing crunch-time plays across ${gamesAnalyzed || '…'} games…`}
+          message={`Analyzing crunch-time plays across ${gamesAnalyzed || 'this season\'s'} games…`}
           hint="This may take a moment if games aren't cached yet."
         />
       )}
