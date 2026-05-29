@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Spinner from './Spinner';
 
 async function fetchClutch(season, seasonType, team) {
   const params = new URLSearchParams({ season, season_type: seasonType, team });
@@ -111,10 +112,10 @@ export default function ClutchIndex({ season, seasonType, games }) {
       {error && <p style={styles.error}>Error: {error}</p>}
 
       {loading && (
-        <div style={styles.loadingBox}>
-          <p style={styles.loadingText}>Analyzing crunch-time plays across {gamesAnalyzed || '…'} games…</p>
-          <p style={styles.loadingHint}>This may take a moment if games aren't cached yet.</p>
-        </div>
+        <Spinner
+          message={`Analyzing crunch-time plays across ${gamesAnalyzed || '…'} games…`}
+          hint="This may take a moment if games aren't cached yet."
+        />
       )}
 
       {!loading && players.length > 0 && (

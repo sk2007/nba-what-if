@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { fetchPlayByPlay, recomputeWpCurveRemote } from '../api/nbaApi';
 import GameSelector from './GameSelector';
+import Spinner from './Spinner';
 
 const EVENT_TYPES = ['shot_2pt', 'shot_3pt', 'free_throw', 'rebound', 'turnover', 'foul', 'timeout', 'substitution', 'other'];
 const EVENT_LABELS = {
@@ -776,7 +777,7 @@ export default function PlayEditor({ season, seasonType }) {
         )}
       </div>
 
-      {loading && <p style={styles.status}>Loading play-by-play…</p>}
+      {loading && <Spinner message="Loading play-by-play…" />}
       {error && <p style={styles.errorText}>Error: {error}</p>}
 
       {game && !loading && (

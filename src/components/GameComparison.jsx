@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import Spinner from './Spinner';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer, Legend,
@@ -52,7 +53,7 @@ function GameSlot({ index, season, seasonType, game, gameId, onGameChange, loadi
         gameId={gameId}
         onGameChange={onGameChange}
       />
-      {loading && <span style={slotStyles.status}>Loading…</span>}
+      {loading && <Spinner />}
       {error && <span style={slotStyles.error}>{error}</span>}
       {game && !loading && (
         <span style={slotStyles.score}>
@@ -163,10 +164,11 @@ export default function GameComparison({ season, seasonType }) {
         />
       </div>
 
-      {!bothLoaded && (
-        <p style={styles.placeholder}>
-          {loading1 || loading2 ? 'Loading…' : 'Select two games above to compare their win probability curves.'}
-        </p>
+      {(loading1 || loading2) && !bothLoaded && (
+        <Spinner message="Loading game data…" />
+      )}
+      {!loading1 && !loading2 && !bothLoaded && (
+        <p style={styles.placeholder}>Select two games above to compare their win probability curves.</p>
       )}
 
       {bothLoaded && (
