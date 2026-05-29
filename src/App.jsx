@@ -171,6 +171,18 @@ export default function App() {
           ? <KalshiMarkets />
           : <KalshiPasswordGate onUnlock={() => setKalshiUnlocked(true)} />
       )}
+      <footer style={footerStyle}>
+        © 2026 Bruin Sports Analytics at UCLA
+      </footer>
     </div>
   );
 }
+
+const footerStyle = {
+  marginTop: '48px',
+  paddingTop: '16px',
+  borderTop: '1px solid #e5e5e5',
+  fontSize: '12px',
+  color: '#aaa',
+  textAlign: 'center',
+};
