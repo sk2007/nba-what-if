@@ -45,7 +45,7 @@ function GameSlot({ index, season, seasonType, game, gameId, onGameChange, loadi
   const color = COLORS[index];
   const label = index === 0 ? 'Game 1' : 'Game 2';
   return (
-    <div style={slotStyles.wrapper}>
+    <div className="comparison-slot" style={slotStyles.wrapper}>
       <div style={{ ...slotStyles.badge, background: color }}>{label}</div>
       <GameSelector
         season={season}
@@ -127,7 +127,6 @@ export default function GameComparison({ season, seasonType }) {
     if (!period) return '';
     const pidx = boundaries.indexOf(period);
     const periodEnd = pidx + 1 < boundaries.length ? boundaries[pidx + 1].seconds : totalSeconds;
-    const remaining = periodEnd - gs + period.seconds;
     const elapsed = gs - period.seconds;
     const rem = (periodEnd - period.seconds) - elapsed;
     const min = Math.floor(rem / 60);
@@ -140,7 +139,7 @@ export default function GameComparison({ season, seasonType }) {
 
   return (
     <div>
-      <div style={styles.slots}>
+      <div className="surface-card" style={styles.slots}>
         <GameSlot
           index={0}
           season={season}
@@ -172,11 +171,16 @@ export default function GameComparison({ season, seasonType }) {
       )}
 
       {bothLoaded && (
-        <div style={styles.chartPanel}>
+        <div className="surface-card" style={styles.chartPanel}>
           <h3 style={styles.chartTitle}>Win Probability Comparison</h3>
-          <div style={styles.legend}>
-            <span style={{ ...styles.legendDot, background: COLORS[0] }} />{label1}
-            <span style={{ ...styles.legendDot, background: COLORS[1], marginLeft: '20px' }} />{label2}
+          <div style={styles.summaryRow}>
+            <span style={styles.summaryPill}>2 games loaded</span>
+            <span style={styles.summaryPill}>{maxQ > 4 ? `${maxQ - 4} OT period${maxQ > 5 ? 's' : ''}` : 'Regulation'}</span>
+            <span style={styles.summaryPill}>Home-team perspective</span>
+          </div>
+          <div className="chart-legend" style={styles.legend}>
+            <span><span style={{ ...styles.legendDot, background: COLORS[0] }} />{label1}</span>
+            <span style={{ marginLeft: '20px' }}><span style={{ ...styles.legendDot, background: COLORS[1] }} />{label2}</span>
           </div>
           <ResponsiveContainer width="100%" height={320}>
             <LineChart data={merged} margin={{ top: 8, right: 16, left: 0, bottom: 24 }}>
@@ -244,6 +248,8 @@ const styles = {
   placeholder: { color: '#999', fontSize: '14px', textAlign: 'center', padding: '40px 0' },
   chartPanel: { background: '#fff', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
   chartTitle: { fontSize: '15px', fontWeight: '700', color: '#1a1a1a', marginBottom: '8px' },
+  summaryRow: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' },
+  summaryPill: { padding: '3px 8px', borderRadius: '999px', background: '#eff6ff', color: '#2563eb', fontSize: '11px', fontWeight: '700' },
   legend: { display: 'flex', alignItems: 'center', fontSize: '13px', color: '#444', marginBottom: '12px' },
   legendDot: { display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', marginRight: '6px' },
   tooltip: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', lineHeight: '1.7' },

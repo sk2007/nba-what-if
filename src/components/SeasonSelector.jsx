@@ -17,7 +17,7 @@ export default function SeasonSelector({ season, onSeasonChange }) {
     <div style={styles.row}>
       <div style={styles.group}>
         <label style={styles.label}>Season</label>
-        <select value={season} onChange={(e) => onSeasonChange(e.target.value)} style={styles.select}>
+        <select className="app-select" value={season} onChange={(e) => onSeasonChange(e.target.value)} style={styles.select}>
           {seasons.map((s) => (
             <option key={s.id} value={s.id}>{s.label}</option>
           ))}

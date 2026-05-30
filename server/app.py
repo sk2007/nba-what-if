@@ -99,6 +99,7 @@ def wp_recompute():
     plays = body.get('plays', [])
     overrides = body.get('overrides', {})
 
+
     # Walk plays in game order, recomputing cumulative scores with overrides applied.
     # Use scoreA/scoreB from non-editable plays as anchors, then adjust for any
     # editable plays that changed since the last anchor.

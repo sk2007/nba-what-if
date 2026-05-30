@@ -8,31 +8,14 @@ import { fetchGames } from './api/nbaApi';
 import './App.css';
 
 const TABS = ['Play Editor', 'Game Comparison', 'Clutch Index', 'Kalshi Markets'];
+const TAB_COPY = {
+  'Play Editor': ['Play Editor', 'Revisit a game play by play and test how changed outcomes reshape its win probability curve.'],
+  'Game Comparison': ['Game Comparison', 'Place two games side by side to compare how momentum shifted from tip-off to the final possession.'],
+  'Clutch Index': ['Clutch Index', 'Rank a team’s crunch-time contributors by the win probability they added in high-pressure moments.'],
+  'Kalshi Markets': ['Kalshi Markets', 'Review NBA prediction markets, sportsbook context, and bankroll-aware recommendations.'],
+};
 const KALSHI_PASSWORD = 'Lebron23';
 const KALSHI_UNLOCK_KEY = 'kalshi-markets-unlocked';
-
-const tabBarStyle = {
-  display: 'flex',
-  gap: '4px',
-  marginBottom: '24px',
-  borderBottom: '1px solid #e5e5e5',
-  paddingBottom: '0',
-};
-
-function tabStyle(active) {
-  return {
-    padding: '8px 18px',
-    fontSize: '13px',
-    fontWeight: active ? '700' : '500',
-    color: active ? '#1a1a1a' : '#888',
-    background: 'none',
-    border: 'none',
-    borderBottom: active ? '2px solid #1a1a1a' : '2px solid transparent',
-    cursor: 'pointer',
-    marginBottom: '-1px',
-    transition: 'color 0.15s',
-  };
-}
 
 const lockStyles = {
   panel: {
@@ -40,7 +23,9 @@ const lockStyles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
-    paddingTop: '8px',
+    padding: '18px',
+    borderRadius: '10px',
+    background: '#fff',
   },
   label: {
     fontSize: '11px',
@@ -95,7 +80,7 @@ function KalshiPasswordGate({ onUnlock }) {
   }
 
   return (
-    <form style={lockStyles.panel} onSubmit={handleSubmit}>
+    <form className="surface-card" style={lockStyles.panel} onSubmit={handleSubmit}>
       <label style={lockStyles.label} htmlFor="kalshi-password">Kalshi Markets Password</label>
       <div style={lockStyles.inputRow}>
         <input
@@ -134,16 +119,42 @@ export default function App() {
   }, [season]);
 
   return (
-    <div>
-      <h1 style={{ marginBottom: '8px', fontSize: '24px' }}>NBA What If</h1>
-      <p style={{ color: '#666', marginBottom: '20px', fontSize: '14px' }}>
-        Explore how key moments affected win probability
-      </p>
-      <div style={tabBarStyle}>
+    <div className="app-shell">
+      <header className="app-header">
+        <div>
+          <p className="app-eyebrow">Bruin Sports Analytics</p>
+          <h1 className="app-title">NBA What If</h1>
+          <p className="app-subtitle">
+            Explore the moments, players, and markets that shape win probability across an NBA season.
+          </p>
+        </div>
+        <span className="app-header-badge">Spring 2026</span>
+        <div className="app-header-ball" aria-hidden="true">
+          <span className="app-header-ball__line app-header-ball__line--vertical" />
+          <span className="app-header-ball__line app-header-ball__line--horizontal" />
+          <span className="app-header-ball__curve app-header-ball__curve--left" />
+          <span className="app-header-ball__curve app-header-ball__curve--right" />
+        </div>
+      </header>
+
+      <nav className="tab-bar" aria-label="Analysis tools">
         {TABS.map(t => (
-          <button key={t} style={tabStyle(tab === t)} onClick={() => setTab(t)}>{t}</button>
+          <button
+            key={t}
+            className={`tab-button${tab === t ? ' tab-button--active' : ''}`}
+            onClick={() => setTab(t)}
+            type="button"
+            aria-current={tab === t ? 'page' : undefined}
+          >
+            {t}
+          </button>
         ))}
-      </div>
+      </nav>
+
+      <section className="tool-intro">
+        <h2 className="tool-intro__title">{TAB_COPY[tab][0]}</h2>
+        <p className="tool-intro__copy">{TAB_COPY[tab][1]}</p>
+      </section>
 
       {tab === 'Play Editor' && (
         <>
@@ -171,18 +182,9 @@ export default function App() {
           ? <KalshiMarkets />
           : <KalshiPasswordGate onUnlock={() => setKalshiUnlocked(true)} />
       )}
-      <footer style={footerStyle}>
+      <footer className="app-footer">
         © 2026 Bruin Sports Analytics at UCLA
       </footer>
     </div>
   );
 }
-
-const footerStyle = {
-  marginTop: '48px',
-  paddingTop: '16px',
-  borderTop: '1px solid #e5e5e5',
-  fontSize: '12px',
-  color: '#aaa',
-  textAlign: 'center',
-};

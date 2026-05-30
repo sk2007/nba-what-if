@@ -38,7 +38,7 @@ function ModelWinProb({ wpCurve, teamA }) {
   const prob = wpCurve[wpCurve.length - 1].wp;
   const color = prob >= 65 ? '#16a34a' : prob <= 35 ? '#dc2626' : '#2563eb';
   return (
-    <div style={modelPanelStyles.panel}>
+    <div className="surface-card" style={modelPanelStyles.panel}>
       <span style={modelPanelStyles.label}>Final Win Prob ({teamA})</span>
       <span style={{ ...modelPanelStyles.prob, color }}>{prob}%</span>
       <span style={modelPanelStyles.sub}>neural network · end of game</span>
@@ -156,7 +156,7 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
 
   return (
     <div style={formStyles.overlay}>
-      <div style={formStyles.form}>
+      <div className="editor-form" style={formStyles.form}>
         <div style={formStyles.formTitle}>Add Play</div>
 
         <div style={formStyles.row}>
@@ -401,7 +401,6 @@ function WinProbChartContent({ data, color, teamA, teamB, height, showBrush, dom
           const isUp = sw.endWp > sw.startWp;
           const swingColor = isUp ? '#16a34a' : '#dc2626';
           const midSeconds = Math.round((sw.startSeconds + sw.endSeconds) / 2);
-          const labelWp = isUp ? Math.min(sw.endWp + 6, 95) : Math.max(sw.endWp - 6, 5);
           const sign = isUp ? '+' : '−';
           return (
             <ReferenceLine
@@ -424,7 +423,7 @@ function WinProbChartContent({ data, color, teamA, teamB, height, showBrush, dom
             onChange={(range) => {
               if (!onBrushChange || range.startIndex == null) return;
               const s = data[range.startIndex]?.gameSeconds ?? 0;
-              const e = data[range.endIndex]?.gameSeconds ?? GAME_TOTAL_SECONDS;
+              const e = data[range.endIndex]?.gameSeconds ?? totalSeconds;
               onBrushChange([s, e]);
             }}
             tickFormatter={(s) => {
@@ -584,7 +583,7 @@ function WinProbChart({ data, title, color, teamA, teamB, maxQuarter, swings }) 
 
   return (
     <>
-      <div style={styles.chartPanel}>
+      <div className="surface-card" style={styles.chartPanel}>
         <div style={styles.chartTitleRow}>
           <h3 style={styles.chartTitle}>{title}</h3>
           <button
@@ -633,7 +632,7 @@ function TopImpactsPanel({ plays, impacts, viewingTeam }) {
   if (!ranked.length) return null;
 
   return (
-    <div style={topImpactStyles.panel}>
+    <div className="surface-card" style={topImpactStyles.panel}>
       <div style={topImpactStyles.title}>Top 5 Most Impactful Plays</div>
       {ranked.map(({ play, impact }, i) => {
         const positive = impact > 0;
@@ -675,7 +674,6 @@ export default function PlayEditor({ season, seasonType }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [quarterFilter, setQuarterFilter] = useState('all');
   const [perspectiveTeam, setPerspectiveTeam] = useState('A');
-
   useEffect(() => {
     setGameId(null);
     setGame(null);
@@ -798,7 +796,7 @@ export default function PlayEditor({ season, seasonType }) {
               </select>
             </div>
           </div>
-          <div style={styles.chartsRow}>
+          <div className="chart-grid" style={styles.chartsRow}>
             <WinProbChart data={displayOriginal} title="Original" color="#2563eb" teamA={viewingTeam} teamB={perspectiveTeam === 'A' ? game.teamB : game.teamA} maxQuarter={maxQuarter} swings={originalSwings} />
             <WinProbChart
               data={displayWhatIf}
@@ -815,8 +813,8 @@ export default function PlayEditor({ season, seasonType }) {
 
           <TopImpactsPanel plays={allPlays} impacts={playImpacts} viewingTeam={viewingTeam} />
 
-          <div style={styles.playList}>
-            <div style={styles.playListHeader}>
+          <div className="surface-card" style={styles.playList}>
+            <div className="play-list-header" style={styles.playListHeader}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <h3 style={styles.playListTitle}>Play-by-Play</h3>
                 <span style={styles.hint}>{allPlays.length} events{addedPlays.length > 0 ? ` (${addedPlays.length} added)` : ''}</span>
@@ -826,7 +824,7 @@ export default function PlayEditor({ season, seasonType }) {
               </button>
             </div>
 
-            <div style={styles.filterRow}>
+            <div className="filter-strip" style={styles.filterRow}>
               <label style={styles.filterLabel}>Quarter:</label>
               {['all', ...quarters].map((q) => (
                 <button
@@ -839,7 +837,8 @@ export default function PlayEditor({ season, seasonType }) {
               ))}
             </div>
 
-            <div style={styles.table}>
+            <div className="responsive-scroll" style={styles.table}>
+              <div className="responsive-table">
               <div style={styles.tableHeader}>
                 <span style={{ width: 80 }}>Time</span>
                 <span style={{ flex: 1 }}>Description</span>
@@ -854,7 +853,7 @@ export default function PlayEditor({ season, seasonType }) {
                 const impactColor = impact == null ? '#ccc' : impact > 0 ? '#16a34a' : impact < 0 ? '#dc2626' : '#999';
                 const impactLabel = impact == null ? '—' : `${impact > 0 ? '+' : ''}${impact}%`;
                 return (
-                  <div key={play.eventNum} style={{ ...styles.tableRow, ...(play.added ? styles.tableRowAdded : isEdited ? styles.tableRowEdited : {}) }}>
+                  <div className="table-row-interactive" key={play.eventNum} style={{ ...styles.tableRow, ...(play.added ? styles.tableRowAdded : isEdited ? styles.tableRowEdited : {}) }}>
                     <span style={styles.timeCell}>
                       Q{play.quarter} {play.clock}
                       {play.added && <span style={styles.addedBadge}>new</span>}
@@ -880,6 +879,7 @@ export default function PlayEditor({ season, seasonType }) {
                   </div>
                 );
               })}
+              </div>
             </div>
           </div>
 

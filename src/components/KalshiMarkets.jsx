@@ -53,7 +53,7 @@ const styles = {
   modalEmpty: { color: '#bbb', fontSize: '13px', textAlign: 'center', padding: '32px 0' },
   propRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' },
   propLabel: { fontSize: '13px', color: '#333', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '8px' },
-  playerHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', userSelect: 'none' },
+  playerHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '10px 0', cursor: 'pointer', border: 'none', borderBottom: '1px solid #f0f0f0', background: 'transparent', textAlign: 'left', userSelect: 'none' },
   playerName: { fontSize: '13px', fontWeight: '700', color: '#1a1a1a' },
 };
 
@@ -228,12 +228,12 @@ function PropsModal({ gameTitle, gameSuffix, onClose }) {
 
   return (
     <div style={styles.backdrop} onClick={onClose}>
-      <div style={styles.modal} onClick={e => e.stopPropagation()}>
+      <div className="modal-panel" style={styles.modal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="props-modal-title">
         <div style={styles.modalHeader}>
-          <div style={styles.modalTitle}>{gameTitle} — Player Props</div>
-          <button style={styles.modalClose} onClick={onClose}>×</button>
+          <div id="props-modal-title" style={styles.modalTitle}>{gameTitle} — Player Props</div>
+          <button style={styles.modalClose} onClick={onClose} aria-label="Close player props">×</button>
         </div>
-        <div style={styles.modalTabs}>
+        <div className="modal-tab-strip" style={styles.modalTabs}>
           {PROP_TABS.map(tab => (
             <button
               key={tab.series}
@@ -253,13 +253,15 @@ function PropsModal({ gameTitle, gameSuffix, onClose }) {
             const isOpen = openPlayer === player;
             return (
               <div key={player}>
-                <div
+                <button
+                  type="button"
                   style={styles.playerHeader}
                   onClick={() => setOpenPlayer(isOpen ? null : player)}
+                  aria-expanded={isOpen}
                 >
                   <span style={styles.playerName}>{player}</span>
                   <span style={{ fontSize: '11px', color: '#aaa' }}>{isOpen ? '▼' : '▶'}</span>
-                </div>
+                </button>
                 {isOpen && lines.map(mk => {
                   const pct = Math.round((parseFloat(mk.yes_ask_dollars) + parseFloat(mk.yes_bid_dollars)) / 2 * 100);
                   const color = pctColor(pct);
@@ -285,7 +287,7 @@ function PropsModal({ gameTitle, gameSuffix, onClose }) {
 
 function BankrollPanel({ bankroll, setBankroll, mode, setMode, portfolioSummary }) {
   return (
-    <div style={styles.bankrollPanel}>
+    <div className="mobile-stack surface-card" style={styles.bankrollPanel}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={{ fontSize: '13px', color: '#555', fontWeight: '600' }}>Bankroll</span>
         <span style={{ fontSize: '13px', color: '#555' }}>$</span>
@@ -313,7 +315,7 @@ function BankrollPanel({ bankroll, setBankroll, mode, setMode, portfolioSummary 
         </button>
       </div>
       {portfolioSummary && (
-        <div style={styles.portfolioSummary}>{portfolioSummary}</div>
+        <div className="bankroll-summary" style={styles.portfolioSummary}>{portfolioSummary}</div>
       )}
     </div>
   );
@@ -403,7 +405,7 @@ function GameCard({ event, markets, oddsGame, bankroll, mode, portfolioAllocatio
 
   return (
     <>
-      <div style={styles.card}>
+      <div className="surface-card" style={styles.card}>
         <div style={styles.cardTitle}>{event.title}</div>
         <div style={styles.cardSub}>{event.sub_title}</div>
         <span style={{ ...styles.statusBadge, ...statusStyle(status) }}>
@@ -413,7 +415,7 @@ function GameCard({ event, markets, oddsGame, bankroll, mode, portfolioAllocatio
           const pct = Math.round((parseFloat(mk.yes_ask_dollars) + parseFloat(mk.yes_bid_dollars)) / 2 * 100);
           const color = pctColor(pct);
           return (
-            <div key={mk.ticker} style={styles.marketRow}>
+            <div className="table-row-interactive" key={mk.ticker} style={styles.marketRow}>
               <span style={styles.teamLabel}>{mk.yes_sub_title}</span>
               <div style={styles.barWrap}>
                 <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '4px', transition: 'width 0.4s' }} />
@@ -541,7 +543,7 @@ export default function KalshiMarkets() {
         <div style={styles.progress}>Loading odds… {loadedCount}/{events.length}</div>
       )}
       {!loading && !err && (
-        <div style={styles.grid}>
+        <div className="market-grid" style={styles.grid}>
           {activeEvents.map((ev, i) => (
             <GameCard
               key={ev.event_ticker}

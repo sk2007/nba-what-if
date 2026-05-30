@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { fetchGames } from '../api/nbaApi';
 
 function teamMatches(teamName, term) {
@@ -9,6 +9,7 @@ function teamMatches(teamName, term) {
 }
 
 export default function GameSelector({ season, seasonType, gameId, onGameChange }) {
+  const inputId = useId();
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -56,10 +57,12 @@ export default function GameSelector({ season, seasonType, gameId, onGameChange 
     : '';
 
   return (
-    <div style={styles.wrapper}>
-      <div style={styles.group}>
-        <label style={styles.label}>Team 1</label>
+    <div className="game-selector" style={styles.wrapper}>
+      <div className="game-selector__group" style={styles.group}>
+        <label style={styles.label} htmlFor={`${inputId}-team-1`}>Team 1</label>
         <input
+          id={`${inputId}-team-1`}
+          className="game-selector__input"
           type="text"
           placeholder="e.g. Thunder"
           value={team1}
@@ -68,10 +71,12 @@ export default function GameSelector({ season, seasonType, gameId, onGameChange 
           disabled={loading || games.length === 0}
         />
       </div>
-      <div style={styles.vsLabel}>vs</div>
-      <div style={styles.group}>
-        <label style={styles.label}>Team 2</label>
+      <div className="game-selector__vs" style={styles.vsLabel}>vs</div>
+      <div className="game-selector__group" style={styles.group}>
+        <label style={styles.label} htmlFor={`${inputId}-team-2`}>Team 2</label>
         <input
+          id={`${inputId}-team-2`}
+          className="game-selector__input"
           type="text"
           placeholder="e.g. Pacers"
           value={team2}
@@ -80,9 +85,11 @@ export default function GameSelector({ season, seasonType, gameId, onGameChange 
           disabled={loading || games.length === 0}
         />
       </div>
-      <div style={styles.group}>
-        <label style={styles.label}>Game{matchLabel ? ` — ${matchLabel}` : ''}</label>
+      <div className="game-selector__group" style={styles.group}>
+        <label style={styles.label} htmlFor={`${inputId}-game`}>Game{matchLabel ? ` — ${matchLabel}` : ''}</label>
         <select
+          id={`${inputId}-game`}
+          className="game-selector__select app-select"
           value={gameId || ''}
           onChange={(e) => onGameChange(e.target.value)}
           style={styles.select}
