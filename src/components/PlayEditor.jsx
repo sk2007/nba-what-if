@@ -340,6 +340,25 @@ function computePlayImpacts(plays, wpCurve) {
   return impacts;
 }
 
+function computeScoreChanges(plays, wpCurve) {
+  const scoreChanges = new Map();
+  const sorted = [...wpCurve].sort((a, b) => a.gameSeconds - b.gameSeconds);
+
+  for (const play of plays) {
+    const idx = sorted.findIndex((pt) => pt.gameSeconds >= play.gameSeconds);
+    if (idx <= 0) continue;
+    const before = sorted[idx - 1];
+    const after = sorted[idx];
+    scoreChanges.set(play.eventNum, {
+      before: `${before.scoreA}–${before.scoreB}`,
+      after: `${after.scoreA}–${after.scoreB}`,
+      changed: before.scoreA !== after.scoreA || before.scoreB !== after.scoreB,
+    });
+  }
+
+  return scoreChanges;
+}
+
 // Shared chart content so both inline and expanded views use the same rendering
 function WinProbChartContent({ data, color, teamA, teamB, height, showBrush, domain, onBrushChange, maxQuarter, swings }) {
   const mq = maxQuarter ?? 4;
@@ -622,7 +641,7 @@ function WinProbChart({ data, title, color, teamA, teamB, maxQuarter, swings }) 
   );
 }
 
-function TopImpactsPanel({ plays, impacts, viewingTeam }) {
+function TopImpactsPanel({ plays, impacts, scoreChanges, viewingTeam, scoreTeamA, scoreTeamB }) {
   if (!impacts.size) return null;
   const ranked = plays
     .map((p) => ({ play: p, impact: impacts.get(p.eventNum) }))
@@ -637,18 +656,30 @@ function TopImpactsPanel({ plays, impacts, viewingTeam }) {
       {ranked.map(({ play, impact }, i) => {
         const positive = impact > 0;
         const color = positive ? '#16a34a' : '#dc2626';
+        const scoreChange = scoreChanges.get(play.eventNum);
         return (
           <div key={play.eventNum} style={topImpactStyles.row}>
             <span style={topImpactStyles.rank}>#{i + 1}</span>
             <span style={topImpactStyles.time}>Q{play.quarter} {play.clock}</span>
-            <span style={topImpactStyles.desc}>{play.description || play.eventType}</span>
+            <span style={topImpactStyles.playInfo}>
+              <span style={topImpactStyles.desc}>{play.description || play.eventType}</span>
+              {scoreChange && (
+                <span style={scoreChange.changed ? topImpactStyles.scoreChange : topImpactStyles.scoreUnchanged}>
+                  {scoreChange.changed
+                    ? `Score ${scoreChange.before} → ${scoreChange.after}`
+                    : `Score stays ${scoreChange.after}`}
+                </span>
+              )}
+            </span>
             <span style={{ ...topImpactStyles.impact, color }}>
               {positive ? '+' : ''}{impact}%
             </span>
           </div>
         );
       })}
-      <div style={topImpactStyles.footer}>WP impact for {viewingTeam}</div>
+      <div style={topImpactStyles.footer}>
+        WP impact for {viewingTeam} · scores shown as {scoreTeamA} – {scoreTeamB}
+      </div>
     </div>
   );
 }
@@ -659,7 +690,10 @@ const topImpactStyles = {
   row: { display: 'flex', alignItems: 'center', gap: '10px', padding: '5px 0', borderBottom: '1px solid #f5f5f5' },
   rank: { fontSize: '11px', fontWeight: '700', color: '#bbb', width: '24px', flexShrink: 0 },
   time: { fontSize: '11px', color: '#888', width: '72px', flexShrink: 0 },
-  desc: { flex: 1, fontSize: '12px', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  playInfo: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' },
+  desc: { fontSize: '12px', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  scoreChange: { fontSize: '11px', fontWeight: '700', color: '#2563eb' },
+  scoreUnchanged: { fontSize: '11px', color: '#94a3b8' },
   impact: { fontSize: '13px', fontWeight: '700', width: '52px', textAlign: 'right', flexShrink: 0 },
   footer: { fontSize: '11px', color: '#bbb', marginTop: '8px' },
 };
@@ -758,6 +792,7 @@ export default function PlayEditor({ season, seasonType }) {
   // Impact scores computed against the active (what-if or original) curve
   const activeCurve = hasChanges ? displayWhatIf : displayOriginal;
   const playImpacts = computePlayImpacts(allPlays, activeCurve);
+  const scoreChanges = computeScoreChanges(allPlays, activeCurve);
 
   return (
     <div>
@@ -811,7 +846,14 @@ export default function PlayEditor({ season, seasonType }) {
 
           <ModelWinProb wpCurve={displayWhatIf} teamA={viewingTeam} />
 
-          <TopImpactsPanel plays={allPlays} impacts={playImpacts} viewingTeam={viewingTeam} />
+          <TopImpactsPanel
+            plays={allPlays}
+            impacts={playImpacts}
+            scoreChanges={scoreChanges}
+            viewingTeam={viewingTeam}
+            scoreTeamA={game.teamA}
+            scoreTeamB={game.teamB}
+          />
 
           <div className="surface-card" style={styles.playList}>
             <div className="play-list-header" style={styles.playListHeader}>
