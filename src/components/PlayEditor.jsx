@@ -316,42 +316,37 @@ function detectMomentumSwings(wpCurve, { topN = 3, windowSecs = 120, minDelta = 
   return kept;
 }
 
-// Compute WP impact for each play: delta between its wpCurve entry and the previous one.
-// Returns a Map<eventNum, deltaWp> where deltaWp is signed (positive = helped teamA).
+// Compute WP impact for each play by matching plays to their corresponding WP curve
+// point by position. The backend generates one curve point per play in order, with a
+// synthetic point at index 0 (gameSeconds=0, wp=50). So curve[i+1] corresponds to plays[i].
+// Returns a Map<eventNum, deltaWp> signed for teamA perspective.
 function computePlayImpacts(plays, wpCurve) {
   const impacts = new Map();
   if (!wpCurve.length) return impacts;
-  // Build a lookup: gameSeconds → wp (last entry wins for ties)
-  const wpBySeconds = new Map();
-  for (const pt of wpCurve) wpBySeconds.set(pt.gameSeconds, pt.wp);
 
-  // Sort curve ascending for prev-point lookup
-  const sorted = [...wpCurve].sort((a, b) => a.gameSeconds - b.gameSeconds);
-
-  for (const play of plays) {
-    // Find the curve point at or just after this play's gameSeconds
-    const idx = sorted.findIndex((pt) => pt.gameSeconds >= play.gameSeconds);
-    if (idx <= 0) continue;
-    const after = sorted[idx];
-    const before = sorted[idx - 1];
+  // curve[0] is the tip-off point; curve[i+1] is after plays[i]
+  for (let i = 0; i < plays.length; i++) {
+    const curveIdx = i + 1;
+    if (curveIdx >= wpCurve.length) break;
+    const after = wpCurve[curveIdx];
+    const before = wpCurve[curveIdx - 1];
     const delta = Math.round((after.wp - before.wp) * 10) / 10;
-    impacts.set(play.eventNum, delta);
+    impacts.set(plays[i].eventNum, delta);
   }
   return impacts;
 }
 
 function computeScoreChanges(plays, wpCurve) {
   const scoreChanges = new Map();
-  const sorted = [...wpCurve].sort((a, b) => a.gameSeconds - b.gameSeconds);
 
-  for (const play of plays) {
-    const idx = sorted.findIndex((pt) => pt.gameSeconds >= play.gameSeconds);
-    if (idx <= 0) continue;
-    const before = sorted[idx - 1];
-    const after = sorted[idx];
-    scoreChanges.set(play.eventNum, {
-      before: `${before.scoreA}–${before.scoreB}`,
-      after: `${after.scoreA}–${after.scoreB}`,
+  for (let i = 0; i < plays.length; i++) {
+    const curveIdx = i + 1;
+    if (curveIdx >= wpCurve.length) break;
+    const before = wpCurve[curveIdx - 1];
+    const after = wpCurve[curveIdx];
+    scoreChanges.set(plays[i].eventNum, {
+      before: `${before.scoreA ?? 0}–${before.scoreB ?? 0}`,
+      after: `${after.scoreA ?? 0}–${after.scoreB ?? 0}`,
       changed: before.scoreA !== after.scoreA || before.scoreB !== after.scoreB,
     });
   }

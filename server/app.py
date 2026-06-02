@@ -187,31 +187,14 @@ def clutch_index():
 
         plays = pbp.get('plays', [])
         team_a = pbp.get('teamA', '')
-        sorted_curve = sorted(pbp.get('wpCurve', []), key=lambda p: p['gameSeconds'])
-        if not sorted_curve:
+        wp_curve = pbp.get('wpCurve', [])
+        # curve[0] is the tip-off point; curve[i+1] corresponds to plays[i]
+        if not wp_curve:
             continue
 
         is_home = (team == team_a)
 
-        def wp_before_play(gs):
-            result = sorted_curve[0]['wp']
-            for pt in sorted_curve:
-                if pt['gameSeconds'] < gs:
-                    result = pt['wp']
-                else:
-                    break
-            return result
-
-        def wp_at_play(gs):
-            result = sorted_curve[0]['wp']
-            for pt in sorted_curve:
-                if pt['gameSeconds'] <= gs:
-                    result = pt['wp']
-                else:
-                    break
-            return result
-
-        for play in plays:
+        for play_idx, play in enumerate(plays):
             if not play.get('player'):
                 continue
             if play.get('team') != team:
@@ -223,11 +206,21 @@ def clutch_index():
                 continue
             if play.get('clockSeconds', 999) > CRUNCH_CLOCK:
                 continue
-            if abs(play.get('scoreA', 0) - play.get('scoreB', 0)) > CRUNCH_MARGIN:
+
+            # Use the score BEFORE this play for the margin check (pre-play state).
+            # curve[play_idx] is the WP point before this play; curve[play_idx+1] is after.
+            curve_before_idx = play_idx      # index into wp_curve (offset by 1 from plays)
+            curve_after_idx = play_idx + 1
+            if curve_after_idx >= len(wp_curve):
+                continue
+            before_wp_pt = wp_curve[curve_before_idx]
+            after_wp_pt = wp_curve[curve_after_idx]
+            pre_score_a = before_wp_pt.get('scoreA', play.get('scoreA', 0))
+            pre_score_b = before_wp_pt.get('scoreB', play.get('scoreB', 0))
+            if abs(pre_score_a - pre_score_b) > CRUNCH_MARGIN:
                 continue
 
-            gs = play.get('gameSeconds', 0)
-            delta = wp_at_play(gs) - wp_before_play(gs)
+            delta = after_wp_pt['wp'] - before_wp_pt['wp']
             if not is_home:
                 delta = -delta
 
