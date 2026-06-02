@@ -71,7 +71,10 @@ const formStyles = {
   addBtn: { padding: '7px 16px', borderRadius: '6px', border: 'none', background: '#1a1a1a', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer' },
 };
 
-function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
+// PlayForm is shared by Add and Edit modes.
+// In edit mode, initialPlay is provided and onSave is called instead of onAdd.
+function AddPlayForm({ game, allPlays, onAdd, onSave, onCancel, initialPlay }) {
+  const isEdit = !!initialPlay;
   const teams = [game.teamA, game.teamB];
   const playersByTeam = {};
   for (const t of teams) playersByTeam[t] = [];
@@ -86,19 +89,28 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
   const availableQuarters = [...new Set(playsAsc.map((p) => p.quarter))].sort((a, b) => a - b);
   const maxQ = availableQuarters[availableQuarters.length - 1] ?? 4;
 
-  const [team, setTeam] = useState(game.teamA);
-  const [player, setPlayer] = useState(playersByTeam[game.teamA][0] || '');
-  const [eventType, setEventType] = useState('shot_2pt');
-  const [made, setMade] = useState(true);
-  const [selectedQuarter, setSelectedQuarter] = useState(availableQuarters[0] ?? 1);
+  const initTeam = initialPlay?.team ?? game.teamA;
+  const initEventType = initialPlay?.addedEventType ?? 'shot_2pt';
+  const initMade = initialPlay ? (initialPlay.shotPts > 0) : true;
 
-  // Plays in the selected quarter, ascending
-  const quarterPlays = playsAsc.filter((p) => p.quarter === selectedQuarter);
-  const [insertAfterIdx, setInsertAfterIdx] = useState(-1);
+  const [team, setTeam] = useState(initTeam);
+  const [player, setPlayer] = useState(initialPlay?.player ?? playersByTeam[initTeam][0] ?? '');
+  const [eventType, setEventType] = useState(initEventType);
+  const [made, setMade] = useState(initMade);
+  const [selectedQuarter, setSelectedQuarter] = useState(initialPlay?.quarter ?? availableQuarters[0] ?? 1);
+
+  // Plays in the selected quarter, ascending (excluding the play being edited)
+  const quarterPlays = playsAsc.filter((p) => p.quarter === selectedQuarter && p.eventNum !== initialPlay?.eventNum);
+  const [insertAfterIdx, setInsertAfterIdx] = useState(() => {
+    if (!initialPlay) return quarterPlays.length > 0 ? quarterPlays.length - 1 : -1;
+    // For editing, default to position just before the original play
+    const origIdx = quarterPlays.findIndex((p) => p.gameSeconds >= initialPlay.gameSeconds);
+    return origIdx > 0 ? origIdx - 1 : -1;
+  });
 
   // Reset insertAfterIdx to end of quarter when quarter changes
   useEffect(() => {
-    const qPlays = playsAsc.filter((p) => p.quarter === selectedQuarter);
+    const qPlays = playsAsc.filter((p) => p.quarter === selectedQuarter && p.eventNum !== initialPlay?.eventNum);
     setInsertAfterIdx(qPlays.length > 0 ? qPlays.length - 1 : -1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedQuarter]);
@@ -108,14 +120,13 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
     setPlayer(playersByTeam[t][0] || '');
   }
 
-  function handleSubmit() {
-    // insertAfterIdx is relative to quarterPlays; map back to playsAsc index
-    const afterPlay = insertAfterIdx >= 0 ? quarterPlays[insertAfterIdx] : null;
-    // "before" is the next play after afterPlay in the full sorted array
+  function buildPlay() {
+    const qPlays = playsAsc.filter((p) => p.quarter === selectedQuarter && p.eventNum !== initialPlay?.eventNum);
+    const afterPlay = insertAfterIdx >= 0 ? qPlays[insertAfterIdx] : null;
     const afterGlobalIdx = afterPlay ? playsAsc.indexOf(afterPlay) : -1;
     const beforePlay = afterPlay
       ? playsAsc[afterGlobalIdx + 1] ?? null
-      : quarterPlays[0] ?? null;
+      : qPlays[0] ?? null;
 
     let gameSeconds;
     if (afterPlay && beforePlay) {
@@ -131,12 +142,11 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
     const refPlay = afterPlay || beforePlay || playsAsc[0];
     const quarter = refPlay ? refPlay.quarter : selectedQuarter;
     const clock = refPlay ? refPlay.clock : '12:00';
-
     const scoring = isScoringType(eventType);
     const pts = shotPtsFor(eventType, made);
 
-    onAdd({
-      eventNum: nextAddedId(),
+    return {
+      eventNum: initialPlay?.eventNum ?? nextAddedId(),
       quarter,
       clock,
       clockSeconds: refPlay?.clockSeconds ?? 0,
@@ -151,13 +161,19 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
       shotPts: pts,
       added: true,
       addedEventType: eventType,
-    });
+    };
+  }
+
+  function handleSubmit() {
+    const play = buildPlay();
+    if (isEdit) onSave(play);
+    else onAdd(play);
   }
 
   return (
     <div style={formStyles.overlay}>
       <div className="editor-form" style={formStyles.form}>
-        <div style={formStyles.formTitle}>Add Play</div>
+        <div style={formStyles.formTitle}>{isEdit ? 'Edit Play' : 'Add Play'}</div>
 
         <div style={formStyles.row}>
           <label style={formStyles.label}>Team</label>
@@ -207,7 +223,7 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
         </div>
 
         <div style={formStyles.row}>
-          <label style={formStyles.label}>Insert after</label>
+          <label style={formStyles.label}>{isEdit ? 'Position (insert after)' : 'Insert after'}</label>
           <select
             value={insertAfterIdx}
             onChange={(e) => setInsertAfterIdx(Number(e.target.value))}
@@ -224,7 +240,7 @@ function AddPlayForm({ game, allPlays, onAdd, onCancel }) {
 
         <div style={formStyles.actions}>
           <button onClick={onCancel} style={formStyles.cancelBtn}>Cancel</button>
-          <button onClick={handleSubmit} style={formStyles.addBtn}>Add Play</button>
+          <button onClick={handleSubmit} style={formStyles.addBtn}>{isEdit ? 'Save Changes' : 'Add Play'}</button>
         </div>
       </div>
     </div>
@@ -700,15 +716,20 @@ export default function PlayEditor({ season, seasonType }) {
   const [error, setError] = useState(null);
   const [overrides, setOverrides] = useState({});
   const [addedPlays, setAddedPlays] = useState([]);
+  const [deletedEventNums, setDeletedEventNums] = useState(new Set());
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingPlay, setEditingPlay] = useState(null);
   const [quarterFilter, setQuarterFilter] = useState('all');
   const [perspectiveTeam, setPerspectiveTeam] = useState('A');
+
   useEffect(() => {
     setGameId(null);
     setGame(null);
     setOverrides({});
     setAddedPlays([]);
+    setDeletedEventNums(new Set());
     setShowAddForm(false);
+    setEditingPlay(null);
   }, [season, seasonType]);
 
   useEffect(() => {
@@ -717,7 +738,9 @@ export default function PlayEditor({ season, seasonType }) {
     setError(null);
     setOverrides({});
     setAddedPlays([]);
+    setDeletedEventNums(new Set());
     setShowAddForm(false);
+    setEditingPlay(null);
     setPerspectiveTeam('A');
     fetchPlayByPlay(gameId)
       .then((data) => { setGame(data); setLoading(false); })
@@ -744,8 +767,38 @@ export default function PlayEditor({ season, seasonType }) {
     setShowAddForm(false);
   }, []);
 
-  const allPlays = game ? [...game.plays, ...addedPlays] : [];
-  const hasChanges = Object.keys(overrides).length > 0 || addedPlays.length > 0;
+  const handleSaveEdit = useCallback((updatedPlay) => {
+    setAddedPlays((prev) => prev.map((p) => p.eventNum === updatedPlay.eventNum ? updatedPlay : p));
+    setEditingPlay(null);
+  }, []);
+
+  const handleDeletePlay = useCallback((eventNum, isAdded) => {
+    if (isAdded) {
+      setAddedPlays((prev) => prev.filter((p) => p.eventNum !== eventNum));
+    } else {
+      setDeletedEventNums((prev) => new Set([...prev, eventNum]));
+      // Clear any override for this play since it's being removed
+      setOverrides((prev) => {
+        const next = { ...prev };
+        delete next[eventNum];
+        return next;
+      });
+    }
+  }, []);
+
+  const handleRestorePlay = useCallback((eventNum) => {
+    setDeletedEventNums((prev) => {
+      const next = new Set(prev);
+      next.delete(eventNum);
+      return next;
+    });
+  }, []);
+
+  // allPlays includes added plays but not deleted originals
+  const allPlays = game
+    ? [...game.plays.filter((p) => !deletedEventNums.has(p.eventNum)), ...addedPlays]
+    : [];
+  const hasChanges = Object.keys(overrides).length > 0 || addedPlays.length > 0 || deletedEventNums.size > 0;
 
   const [whatIfCurve, setWhatIfCurve] = useState([]);
   const wpDebounceRef = useRef(null);
@@ -770,6 +823,7 @@ export default function PlayEditor({ season, seasonType }) {
     const parts = [];
     if (addedPlays.length > 0) parts.push(`${addedPlays.length} added`);
     if (Object.keys(overrides).length > 0) parts.push(`${Object.keys(overrides).length} edited`);
+    if (deletedEventNums.size > 0) parts.push(`${deletedEventNums.size} deleted`);
     return parts.join(', ');
   })();
 
@@ -799,7 +853,7 @@ export default function PlayEditor({ season, seasonType }) {
           onGameChange={setGameId}
         />
         {hasChanges && (
-          <button onClick={() => { setOverrides({}); setAddedPlays([]); }} style={styles.resetBtn}>
+          <button onClick={() => { setOverrides({}); setAddedPlays([]); setDeletedEventNums(new Set()); }} style={styles.resetBtn}>
             Reset ({changeLabel})
           </button>
         )}
@@ -854,7 +908,7 @@ export default function PlayEditor({ season, seasonType }) {
             <div className="play-list-header" style={styles.playListHeader}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <h3 style={styles.playListTitle}>Play-by-Play</h3>
-                <span style={styles.hint}>{allPlays.length} events{addedPlays.length > 0 ? ` (${addedPlays.length} added)` : ''}</span>
+                <span style={styles.hint}>{allPlays.length} events{changeLabel ? ` (${changeLabel})` : ''}</span>
               </div>
               <button onClick={() => setShowAddForm(true)} style={styles.addPlayBtn}>
                 + Add Play
@@ -881,6 +935,7 @@ export default function PlayEditor({ season, seasonType }) {
                 <span style={{ flex: 1 }}>Description</span>
                 <span style={{ width: 100 }}>Outcome</span>
                 <span style={{ width: 72, textAlign: 'right' }}>WP Impact</span>
+                <span style={{ width: 56, textAlign: 'right' }}></span>
               </div>
               {filteredPlays.map((play) => {
                 const isEdited = overrides[play.eventNum] !== undefined;
@@ -913,9 +968,40 @@ export default function PlayEditor({ season, seasonType }) {
                     <span style={{ width: 72, textAlign: 'right', fontSize: '12px', fontWeight: impactAbs >= 5 ? '700' : '400', color: impactColor }}>
                       {impactLabel}
                     </span>
+                    <span style={styles.rowActions}>
+                      {play.added && (
+                        <button
+                          title="Edit play"
+                          onClick={() => setEditingPlay(play)}
+                          style={styles.rowActionBtn}
+                        >✎</button>
+                      )}
+                      <button
+                        title="Delete play"
+                        onClick={() => handleDeletePlay(play.eventNum, !!play.added)}
+                        style={{ ...styles.rowActionBtn, ...styles.rowDeleteBtn }}
+                      >×</button>
+                    </span>
                   </div>
                 );
               })}
+              {/* Deleted original plays shown at bottom with restore option */}
+              {[...(game?.plays ?? [])].filter((p) => deletedEventNums.has(p.eventNum) &&
+                (quarterFilter === 'all' || p.quarter === Number(quarterFilter))).map((play) => (
+                <div key={play.eventNum} style={{ ...styles.tableRow, ...styles.tableRowDeleted }}>
+                  <span style={{ ...styles.timeCell, opacity: 0.5 }}>Q{play.quarter} {play.clock}</span>
+                  <span style={{ ...styles.descCell, opacity: 0.5, textDecoration: 'line-through' }}>{play.description || '—'}</span>
+                  <span style={{ width: 100 }}><span style={styles.deletedBadge}>deleted</span></span>
+                  <span style={{ width: 72 }}></span>
+                  <span style={styles.rowActions}>
+                    <button
+                      title="Restore play"
+                      onClick={() => handleRestorePlay(play.eventNum)}
+                      style={{ ...styles.rowActionBtn, ...styles.rowRestoreBtn }}
+                    >↩</button>
+                  </span>
+                </div>
+              ))}
               </div>
             </div>
           </div>
@@ -926,6 +1012,15 @@ export default function PlayEditor({ season, seasonType }) {
               allPlays={allPlays}
               onAdd={handleAddPlay}
               onCancel={() => setShowAddForm(false)}
+            />
+          )}
+          {editingPlay && (
+            <AddPlayForm
+              game={game}
+              allPlays={allPlays}
+              initialPlay={editingPlay}
+              onSave={handleSaveEdit}
+              onCancel={() => setEditingPlay(null)}
             />
           )}
         </>
@@ -973,4 +1068,10 @@ const styles = {
   outcomeSelect: { padding: '3px 6px', borderRadius: '4px', border: '1px solid #d0d0d0', fontSize: '12px', cursor: 'pointer', background: '#fafafa', width: '80px' },
   outcomeSelectEdited: { border: '1px solid #f59e0b', background: '#fffbeb' },
   nonEditable: { color: '#ccc', fontSize: '13px' },
+  tableRowDeleted: { background: '#fef2f2', borderLeft: '3px solid #dc2626', opacity: 0.75 },
+  deletedBadge: { fontSize: '10px', fontWeight: '700', color: '#dc2626', background: '#fee2e2', borderRadius: '3px', padding: '1px 4px', textTransform: 'uppercase', letterSpacing: '0.04em' },
+  rowActions: { width: 56, display: 'flex', justifyContent: 'flex-end', gap: '4px', flexShrink: 0 },
+  rowActionBtn: { padding: '2px 6px', borderRadius: '4px', border: '1px solid #d0d0d0', background: '#fafafa', color: '#555', fontSize: '13px', cursor: 'pointer', lineHeight: 1.2 },
+  rowDeleteBtn: { color: '#dc2626', border: '1px solid #fca5a5', background: '#fff5f5' },
+  rowRestoreBtn: { color: '#16a34a', border: '1px solid #86efac', background: '#f0fdf4' },
 };
