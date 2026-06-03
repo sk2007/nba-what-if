@@ -6,7 +6,7 @@ import requests as http_requests
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from server.nba_client import get_games, get_play_by_play
+from server.nba_client import get_available_seasons, get_games, get_play_by_play
 from server.wp_mlp import compute_wp_curve
 
 app = Flask(__name__)
@@ -15,15 +15,11 @@ CORS(app)
 KALSHI_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
 KALSHI_HEADERS = {'accept': 'application/json'}
 
-SEASONS = [
-    f"{y}-{str(y+1)[-2:]}" for y in range(2024, 2014, -1)
-]
-
-
 @app.get("/api/seasons")
 def seasons():
+    available_seasons = get_available_seasons()
     return jsonify({
-        "seasons": [{"id": s, "label": s} for s in SEASONS],
+        "seasons": [{"id": s, "label": s} for s in available_seasons],
         "seasonTypes": ["Regular Season"],
     })
 
@@ -114,13 +110,10 @@ def wp_recompute():
     team_a = body.get('teamA', '')
     plays = body.get('plays', [])
     overrides = body.get('overrides', {})
+    line = body.get('line', 0)
 
     sorted_plays = sorted(plays, key=lambda p: p.get('gameSeconds', 0))
 
-    score_delta_a = 0
-    score_delta_b = 0
-    last_anchor_a = 0
-    last_anchor_b = 0
     score_a = 0
     score_b = 0
     enriched = []
@@ -133,25 +126,16 @@ def wp_recompute():
             orig_made = orig_pts > 0
             made = (override == 'Made') if override is not None else orig_made
             actual_pts = _pts_for_type(play) if made else 0
-            orig_contribution = 0 if play.get('added') else orig_pts
 
             if play.get('team') == team_a:
-                score_delta_a += actual_pts - orig_contribution
+                score_a += actual_pts
             else:
-                score_delta_b += actual_pts - orig_contribution
-
-            score_a = play.get('scoreA', last_anchor_a) + score_delta_a
-            score_b = play.get('scoreB', last_anchor_b) + score_delta_b
-        else:
-            last_anchor_a = play.get('scoreA', last_anchor_a)
-            last_anchor_b = play.get('scoreB', last_anchor_b)
-            score_a = last_anchor_a + score_delta_a
-            score_b = last_anchor_b + score_delta_b
+                score_b += actual_pts
 
         enriched.append({**play, 'scoreA': score_a, 'scoreB': score_b})
 
     if mlp_available():
-        curve = mlp_curve(enriched, team_a)
+        curve = mlp_curve(enriched, team_a, line=line)
     else:
         from server.win_probability import compute_wp_curve as sigmoid_curve
         curve = sigmoid_curve(enriched)

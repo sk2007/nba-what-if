@@ -86,10 +86,12 @@ def compute_wp_curve(plays, team_a, line=0):
         from server.win_probability import compute_wp_curve as sigmoid_curve
         return sigmoid_curve(plays)
 
-    if not plays:
-        return [{'gameSeconds': 0, 'wp': 50}]
+    try:
+        line = float(line or 0)
+    except (TypeError, ValueError):
+        line = 0
 
-    max_quarter = max(p.get('quarter', 4) for p in plays)
+    max_quarter = max((p.get('quarter', 4) for p in plays), default=4)
     total_seconds = 2880 if max_quarter <= 4 else 2880 + (max_quarter - 4) * 300
 
     home_fouls_period = 0
@@ -98,7 +100,33 @@ def compute_wp_curve(plays, team_a, line=0):
     home_ejections = 0
     away_ejections = 0
 
-    curve = [{'gameSeconds': 0, 'wp': 50}]
+    initial_row = {
+        'periodSecondsLeft': 720,
+        'secondsLeft': total_seconds,
+        'scoreDif': 0,
+        'scoreTimePressure': 0,
+        'pointsTotal': 0,
+        'possession': 0,
+        'homeFouls': 0,
+        'awayFouls': 0,
+        'homeBonus': 0,
+        'awayBonus': 0,
+        'homeFreeThrows': 0,
+        'awayFreeThrows': 0,
+        'homeEjections': 0,
+        'awayEjections': 0,
+        'line': line,
+        'quarter': 'Q1',
+    }
+    curve = [{
+        'gameSeconds': 0,
+        'wp': round(predict_proba(initial_row) * 100),
+        'scoreA': 0,
+        'scoreB': 0,
+    }]
+
+    if not plays:
+        return curve
 
     for play in plays:
         quarter = play.get('quarter', 1)

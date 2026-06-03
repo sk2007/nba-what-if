@@ -27,6 +27,17 @@ def _season_year(season):
     return int(season.split("-")[0])
 
 
+def get_available_seasons():
+    seasons = set()
+    for path in _CACHE_DIR.glob("games_*_Regular_Season.json"):
+        name = path.stem
+        prefix = "games_"
+        suffix = "_Regular_Season"
+        if name.startswith(prefix) and name.endswith(suffix):
+            seasons.add(name[len(prefix):-len(suffix)])
+    return sorted(seasons, reverse=True)
+
+
 # Playoff game IDs start with "0042", regular season with "0022"
 _SEASON_TYPE_PREFIX = {"Regular Season": "0022", "Playoffs": "0042"}
 
@@ -122,6 +133,7 @@ def _parse_cdn_clock(clock_str, quarter):
 
 def _fetch_play_by_play(game_id):
     from nba_api.live.nba.endpoints import boxscore, playbyplay
+    from server.betting_lines import get_pregame_line
     from server.wp_mlp import compute_wp_curve
 
     pbp_data = playbyplay.PlayByPlay(
@@ -143,6 +155,13 @@ def _fetch_play_by_play(game_id):
     team_a = f"{home['teamCity']} {home['teamName']}"  # home = teamA
     team_b = f"{away['teamCity']} {away['teamName']}"
     home_id = home["teamId"]
+    game_date = (
+        box_game.get("gameTimeUTC")
+        or box_game.get("gameEt")
+        or box_game.get("gameDate")
+        or ""
+    )[:10]
+    betting_line = get_pregame_line(team_a, team_b, game_date)
 
     # Build nameI → full name map from boxscore roster
     name_map = {}
@@ -174,7 +193,7 @@ def _fetch_play_by_play(game_id):
             except ValueError:
                 pass
 
-        event_type, editable, shot_pts = _classify_cdn_event(action)
+        event_type, editable, shot_pts, added_event_type = _classify_cdn_event(action)
 
         team_id = action.get("teamId")
         team_full = team_a if team_id == home_id else (team_b if team_id else None)
@@ -198,14 +217,17 @@ def _fetch_play_by_play(game_id):
         }
         if shot_pts is not None:
             play["shotPts"] = shot_pts
+        if added_event_type:
+            play["addedEventType"] = added_event_type
         plays.append(play)
 
-    wp_curve = compute_wp_curve(plays, team_a)
+    wp_curve = compute_wp_curve(plays, team_a, line=betting_line)
 
     return {
         "gameId": game_id,
         "teamA": team_a,
         "teamB": team_b,
+        "bettingLine": betting_line,
         "plays": plays,
         "wpCurve": wp_curve,
     }
@@ -215,7 +237,7 @@ def _classify_cdn_event(action):
     """
     CDN actionType values: '2pt', '3pt', 'freethrow', 'rebound', 'turnover',
     'foul', 'timeout', 'substitution', 'jumpball', 'period', 'violation', etc.
-    Returns (event_type_str, editable, shot_pts_or_None)
+    Returns (event_type_str, editable, shot_pts_or_None, added_event_type_or_None)
     """
     action_type = action.get("actionType", "")
     shot_result = action.get("shotResult", "")
@@ -223,19 +245,19 @@ def _classify_cdn_event(action):
 
     if action_type in ("2pt", "3pt"):
         pts = (3 if action_type == "3pt" else 2) if made else 0
-        return "shot", True, pts
+        return "shot", True, pts, ("shot_3pt" if action_type == "3pt" else "shot_2pt")
     if action_type == "freethrow":
-        return "free_throw", True, (1 if made else 0)
+        return "free_throw", True, (1 if made else 0), "free_throw"
     if action_type == "rebound":
-        return "rebound", False, None
+        return "rebound", False, None, None
     if action_type == "turnover":
-        return "turnover", False, None
+        return "turnover", False, None, None
     if action_type == "foul":
-        return "foul", False, None
+        return "foul", False, None, None
     if action_type == "timeout":
-        return "timeout", False, None
+        return "timeout", False, None, None
     if action_type == "substitution":
-        return "substitution", False, None
+        return "substitution", False, None, None
     if action_type == "jumpball":
-        return "jump_ball", False, None
-    return "other", False, None
+        return "jump_ball", False, None, None
+    return "other", False, None, None
