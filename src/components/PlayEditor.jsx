@@ -267,7 +267,7 @@ function buildPeriodBoundaries(maxQuarter) {
   for (let q = 5; q <= maxQuarter; q++) {
     boundaries.push({
       seconds: REGULATION_SECONDS + (q - 5) * 300,
-      label: maxQuarter === 5 ? 'OT' : `OT${q - 4}`,
+      label: `OT${q - 4}`,
     });
   }
   return boundaries;
@@ -275,7 +275,11 @@ function buildPeriodBoundaries(maxQuarter) {
 
 function quarterLabel(q, maxQuarter) {
   if (q <= 4) return `Q${q}`;
-  return maxQuarter === 5 ? 'OT' : `OT${q - 4}`;
+  return `OT${q - 4}`;
+}
+
+function playTimeLabel(play, maxQuarter) {
+  return `${quarterLabel(play.quarter, maxQuarter)} ${play.clock}`;
 }
 
 function totalSecondsForMaxQuarter(maxQuarter) {
@@ -432,6 +436,7 @@ function ChangeImpactPanel({
   viewingTeam,
   teamA,
   teamB,
+  maxQuarter,
 }) {
   if (!hasChanges || !originalCurve.length || !whatIfCurve.length) return null;
 
@@ -475,7 +480,7 @@ function ChangeImpactPanel({
             return (
               <div key={`${label}-${play.eventNum}`} style={changeImpactStyles.row}>
                 <span style={changeImpactStyles.badge}>{label}</span>
-                <span style={changeImpactStyles.time}>Q{play.quarter} {play.clock}</span>
+                <span style={changeImpactStyles.time}>{playTimeLabel(play, maxQuarter)}</span>
                 <span style={changeImpactStyles.desc}>{play.description || play.eventType}</span>
                 <span style={{ ...changeImpactStyles.wpDelta, color: wpColor }}>
                   {`WP ${originalPoint?.wp ?? 0}% -> ${whatIfPoint?.wp ?? 0}%`}
@@ -774,7 +779,7 @@ function WinProbChart({ data, title, color, teamA, teamB, maxQuarter, swings }) 
   );
 }
 
-function TopImpactsPanel({ plays, impacts, scoreChanges, viewingTeam, scoreTeamA, scoreTeamB }) {
+function TopImpactsPanel({ plays, impacts, scoreChanges, viewingTeam, scoreTeamA, scoreTeamB, maxQuarter }) {
   if (!impacts.size) return null;
   const ranked = plays
     .map((p) => ({ play: p, impact: impacts.get(p.eventNum) }))
@@ -793,7 +798,7 @@ function TopImpactsPanel({ plays, impacts, scoreChanges, viewingTeam, scoreTeamA
         return (
           <div key={play.eventNum} style={topImpactStyles.row}>
             <span style={topImpactStyles.rank}>#{i + 1}</span>
-            <span style={topImpactStyles.time}>Q{play.quarter} {play.clock}</span>
+            <span style={topImpactStyles.time}>{playTimeLabel(play, maxQuarter)}</span>
             <span style={topImpactStyles.playInfo}>
               <span style={topImpactStyles.desc}>{play.description || play.eventType}</span>
               {scoreChange && (
@@ -1094,6 +1099,7 @@ export default function PlayEditor({ season, seasonType }) {
             viewingTeam={viewingTeam}
             teamA={game.teamA}
             teamB={game.teamB}
+            maxQuarter={maxQuarter}
           />
 
           <TopImpactsPanel
@@ -1103,6 +1109,7 @@ export default function PlayEditor({ season, seasonType }) {
             viewingTeam={viewingTeam}
             scoreTeamA={game.teamA}
             scoreTeamB={game.teamB}
+            maxQuarter={maxQuarter}
           />
 
           <div className="surface-card" style={styles.playList}>
@@ -1124,7 +1131,7 @@ export default function PlayEditor({ season, seasonType }) {
                   onClick={() => setQuarterFilter(String(q))}
                   style={{ ...styles.filterBtn, ...(quarterFilter === String(q) ? styles.filterBtnActive : {}) }}
                 >
-                  {q === 'all' ? 'All' : `Q${q}`}
+                  {q === 'all' ? 'All' : quarterLabel(Number(q), maxQuarter)}
                 </button>
               ))}
               <span style={styles.filterSpacer} />
@@ -1168,7 +1175,7 @@ export default function PlayEditor({ season, seasonType }) {
                       />
                     </span>
                     <span style={styles.timeCell}>
-                      Q{play.quarter} {play.clock}
+                      {playTimeLabel(play, maxQuarter)}
                       {play.added && <span style={styles.addedBadge}>new</span>}
                       {isDetailEdited && <span style={styles.editedBadge}>edit</span>}
                     </span>
@@ -1210,7 +1217,7 @@ export default function PlayEditor({ season, seasonType }) {
                 (quarterFilter === 'all' || p.quarter === Number(quarterFilter))).map((play) => (
                 <div key={play.eventNum} style={{ ...styles.tableRow, ...styles.tableRowDeleted }}>
                   <span style={styles.selectCell}></span>
-                  <span style={{ ...styles.timeCell, opacity: 0.5 }}>Q{play.quarter} {play.clock}</span>
+                  <span style={{ ...styles.timeCell, opacity: 0.5 }}>{playTimeLabel(play, maxQuarter)}</span>
                   <span style={{ ...styles.descCell, opacity: 0.5, textDecoration: 'line-through' }}>{play.description || '—'}</span>
                   <span style={{ width: 100 }}><span style={styles.deletedBadge}>deleted</span></span>
                   <span style={{ width: 72 }}></span>

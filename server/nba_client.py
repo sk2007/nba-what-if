@@ -14,6 +14,7 @@ _NBA_LIVE_HEADERS = {
 
 _cache = {}
 _CACHE_DIR = Path(__file__).resolve().parent / "cache"
+MIN_SELECTABLE_SEASON_START = 2020
 
 
 def _cached(key, fn):
@@ -34,8 +35,14 @@ def get_available_seasons():
         prefix = "games_"
         suffix = "_Regular_Season"
         if name.startswith(prefix) and name.endswith(suffix):
-            seasons.add(name[len(prefix):-len(suffix)])
+            season = name[len(prefix):-len(suffix)]
+            if _season_year(season) >= MIN_SELECTABLE_SEASON_START:
+                seasons.add(season)
     return sorted(seasons, reverse=True)
+
+
+def is_selectable_season(season):
+    return _season_year(season) >= MIN_SELECTABLE_SEASON_START
 
 
 # Playoff game IDs start with "0042", regular season with "0022"

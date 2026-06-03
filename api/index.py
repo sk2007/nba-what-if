@@ -6,7 +6,7 @@ import requests as http_requests
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from server.nba_client import get_available_seasons, get_games, get_play_by_play
+from server.nba_client import get_available_seasons, get_games, get_play_by_play, is_selectable_season
 from server.wp_mlp import compute_wp_curve
 
 app = Flask(__name__)
@@ -30,6 +30,8 @@ def games():
     season_type = request.args.get("season_type")
     if not season or not season_type:
         return jsonify({"error": "season and season_type are required"}), 400
+    if not is_selectable_season(season):
+        return jsonify({"error": "games before the 2020-21 season are unavailable"}), 400
     try:
         return jsonify({"games": get_games(season, season_type)})
     except Exception as e:
