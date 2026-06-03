@@ -1,12 +1,8 @@
-import json
 from datetime import datetime
-from pathlib import Path
 
 import requests
 
 
-_CACHE_DIR = Path(__file__).resolve().parent / "cache"
-_CACHE_PATH = _CACHE_DIR / "rotowire_nba_lines.json"
 _ROTOWIRE_URL = "https://www.rotowire.com/betting/nba/tables/games-archive.php"
 _HEADERS = {
     "User-Agent": (
@@ -51,9 +47,6 @@ _TEAM_ABBREV = {
     "Washington Wizards": "WAS",
 }
 
-_lines_cache = None
-_line_index = None
-
 
 def get_pregame_line(home_team, away_team, game_date=None):
     """
@@ -65,7 +58,11 @@ def get_pregame_line(home_team, away_team, game_date=None):
     if not home_abbrev or not away_abbrev:
         return 0
 
-    index = _get_line_index()
+    lines = _get_lines()
+    index = {
+        (date, line_home, line_away): line
+        for date, line_home, line_away, line in lines
+    }
     date_key = _date_key(game_date)
     if date_key:
         line = index.get((date_key, home_abbrev, away_abbrev))
@@ -74,35 +71,14 @@ def get_pregame_line(home_team, away_team, game_date=None):
 
     # Fallback for callers that cannot resolve a date: use the latest matching
     # matchup. This is less precise, so dated lookups should be preferred.
-    for row_date, row_home, row_away, line in reversed(_get_lines()):
+    for row_date, row_home, row_away, line in reversed(lines):
         if row_home == home_abbrev and row_away == away_abbrev:
             return line
     return 0
 
 
-def _get_line_index():
-    global _line_index
-    if _line_index is None:
-        _line_index = {
-            (date, home, away): line
-            for date, home, away, line in _get_lines()
-        }
-    return _line_index
-
-
 def _get_lines():
-    global _lines_cache
-    if _lines_cache is None:
-        _lines_cache = _load_cached_lines()
-    return _lines_cache
-
-
-def _load_cached_lines():
-    rows = _read_cache()
-    if rows is None:
-        rows = _fetch_archive()
-        _write_cache(rows)
-
+    rows = _fetch_archive()
     lines = []
     for row in rows:
         try:
@@ -122,19 +98,6 @@ def _fetch_archive():
     response = requests.get(_ROTOWIRE_URL, headers=_HEADERS, timeout=20)
     response.raise_for_status()
     return response.json()
-
-
-def _read_cache():
-    if not _CACHE_PATH.exists():
-        return None
-    with _CACHE_PATH.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _write_cache(rows):
-    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    with _CACHE_PATH.open("w", encoding="utf-8") as f:
-        json.dump(rows, f)
 
 
 def _date_key(value):
