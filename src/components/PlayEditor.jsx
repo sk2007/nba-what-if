@@ -427,22 +427,6 @@ function WinProbChartContent({ data, color, teamA, teamB, height, showBrush, dom
           />
         ))}
         <ReferenceLine y={50} stroke="#ddd" strokeDasharray="4 2" />
-        {(swings ?? []).map((sw, i) => {
-          const isUp = sw.endWp > sw.startWp;
-          const swingColor = isUp ? '#16a34a' : '#dc2626';
-          const midSeconds = Math.round((sw.startSeconds + sw.endSeconds) / 2);
-          const sign = isUp ? '+' : '−';
-          return (
-            <ReferenceLine
-              key={`swing-${i}`}
-              x={midSeconds}
-              stroke={swingColor}
-              strokeWidth={1.5}
-              strokeDasharray="3 3"
-              label={{ value: `${sign}${sw.delta}%`, position: 'insideTop', fontSize: 9, fill: swingColor, fontWeight: 700 }}
-            />
-          );
-        })}
         <Line type="monotone" dataKey="wp" stroke={color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
         {showBrush && (
           <Brush
