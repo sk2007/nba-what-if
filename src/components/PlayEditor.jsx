@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer, Brush,
@@ -25,6 +25,13 @@ function shotPtsFor(eventType, made) {
   return 0;
 }
 
+function eventTypeForPlay(play) {
+  if (play?.addedEventType) return play.addedEventType;
+  if (play?.eventType === 'free_throw') return 'free_throw';
+  if (play?.eventType === 'shot') return play.shotPts === 3 ? 'shot_3pt' : 'shot_2pt';
+  return EVENT_TYPES.includes(play?.eventType) ? play.eventType : 'other';
+}
+
 function buildDescription(eventType, player, team, made) {
   const base = player ? `${player}` : team;
   if (eventType === 'shot_2pt') return `${base} 2PT Shot (${made ? 'Made' : 'Missed'})`;
@@ -32,26 +39,6 @@ function buildDescription(eventType, player, team, made) {
   if (eventType === 'free_throw') return `${base} Free Throw (${made ? 'Made' : 'Missed'})`;
   return `${base} ${EVENT_LABELS[eventType]}`;
 }
-
-function ModelWinProb({ wpCurve, teamA }) {
-  if (!wpCurve.length) return null;
-  const prob = wpCurve[wpCurve.length - 1].wp;
-  const color = prob >= 65 ? '#16a34a' : prob <= 35 ? '#dc2626' : '#2563eb';
-  return (
-    <div className="surface-card" style={modelPanelStyles.panel}>
-      <span style={modelPanelStyles.label}>Final Win Prob ({teamA})</span>
-      <span style={{ ...modelPanelStyles.prob, color }}>{prob}%</span>
-      <span style={modelPanelStyles.sub}>neural network · end of game</span>
-    </div>
-  );
-}
-
-const modelPanelStyles = {
-  panel: { display: 'flex', alignItems: 'center', gap: '16px', background: '#fff', borderRadius: '8px', padding: '14px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '16px' },
-  label: { fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' },
-  prob: { fontSize: '36px', fontWeight: '700', lineHeight: 1, transition: 'color 0.2s' },
-  sub: { fontSize: '11px', color: '#bbb' },
-};
 
 let _addedCounter = -1;
 function nextAddedId() { return _addedCounter--; }
@@ -90,14 +77,16 @@ function AddPlayForm({ game, allPlays, onAdd, onSave, onCancel, initialPlay }) {
   const maxQ = availableQuarters[availableQuarters.length - 1] ?? 4;
 
   const initTeam = initialPlay?.team ?? game.teamA;
-  const initEventType = initialPlay?.addedEventType ?? 'shot_2pt';
+  const initEventType = initialPlay ? eventTypeForPlay(initialPlay) : 'shot_2pt';
   const initMade = initialPlay ? (initialPlay.shotPts > 0) : true;
+  const initQuarter = initialPlay?.quarter ?? availableQuarters[0] ?? 1;
 
   const [team, setTeam] = useState(initTeam);
   const [player, setPlayer] = useState(initialPlay?.player ?? playersByTeam[initTeam][0] ?? '');
   const [eventType, setEventType] = useState(initEventType);
   const [made, setMade] = useState(initMade);
-  const [selectedQuarter, setSelectedQuarter] = useState(initialPlay?.quarter ?? availableQuarters[0] ?? 1);
+  const [selectedQuarter, setSelectedQuarter] = useState(initQuarter);
+  const [clockInput, setClockInput] = useState(formatClockSeconds(initialPlay?.clockSeconds ?? quarterDuration(initQuarter)));
 
   // Plays in the selected quarter, ascending (excluding the play being edited)
   const quarterPlays = playsAsc.filter((p) => p.quarter === selectedQuarter && p.eventNum !== initialPlay?.eventNum);
@@ -108,12 +97,29 @@ function AddPlayForm({ game, allPlays, onAdd, onSave, onCancel, initialPlay }) {
     return origIdx > 0 ? origIdx - 1 : -1;
   });
 
-  // Reset insertAfterIdx to end of quarter when quarter changes
-  useEffect(() => {
-    const qPlays = playsAsc.filter((p) => p.quarter === selectedQuarter && p.eventNum !== initialPlay?.eventNum);
-    setInsertAfterIdx(qPlays.length > 0 ? qPlays.length - 1 : -1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedQuarter]);
+  function clockForInsertIndex(index, qPlays, quarter) {
+    const afterPlay = index >= 0 ? qPlays[index] : null;
+    const beforePlay = index >= 0 ? qPlays[index + 1] : qPlays[0];
+    if (afterPlay && beforePlay) {
+      return formatClockSeconds(Math.round((afterPlay.clockSeconds + beforePlay.clockSeconds) / 2));
+    }
+    if (afterPlay) return formatClockSeconds(Math.max(0, afterPlay.clockSeconds - 1));
+    if (beforePlay) return formatClockSeconds(Math.min(quarterDuration(quarter), beforePlay.clockSeconds + 1));
+    return formatClockSeconds(quarterDuration(quarter));
+  }
+
+  function handleQuarterSelect(q) {
+    const qPlays = playsAsc.filter((p) => p.quarter === q && p.eventNum !== initialPlay?.eventNum);
+    const nextIndex = qPlays.length > 0 ? qPlays.length - 1 : -1;
+    setSelectedQuarter(q);
+    setInsertAfterIdx(nextIndex);
+    setClockInput(clockForInsertIndex(nextIndex, qPlays, q));
+  }
+
+  function handleInsertAfterChange(index) {
+    setInsertAfterIdx(index);
+    setClockInput(clockForInsertIndex(index, quarterPlays, selectedQuarter));
+  }
 
   function handleTeamChange(t) {
     setTeam(t);
@@ -121,27 +127,16 @@ function AddPlayForm({ game, allPlays, onAdd, onSave, onCancel, initialPlay }) {
   }
 
   function buildPlay() {
-    const qPlays = playsAsc.filter((p) => p.quarter === selectedQuarter && p.eventNum !== initialPlay?.eventNum);
-    const afterPlay = insertAfterIdx >= 0 ? qPlays[insertAfterIdx] : null;
-    const afterGlobalIdx = afterPlay ? playsAsc.indexOf(afterPlay) : -1;
-    const beforePlay = afterPlay
-      ? playsAsc[afterGlobalIdx + 1] ?? null
-      : qPlays[0] ?? null;
-
-    let gameSeconds;
-    if (afterPlay && beforePlay) {
-      gameSeconds = Math.round((afterPlay.gameSeconds + beforePlay.gameSeconds) / 2);
-    } else if (afterPlay) {
-      gameSeconds = afterPlay.gameSeconds + 1;
-    } else if (beforePlay) {
-      gameSeconds = Math.max(0, beforePlay.gameSeconds - 1);
-    } else {
-      gameSeconds = 0;
-    }
-
-    const refPlay = afterPlay || beforePlay || playsAsc[0];
-    const quarter = refPlay ? refPlay.quarter : selectedQuarter;
-    const clock = refPlay ? refPlay.clock : '12:00';
+    const parsedClockSeconds = parseClockInput(clockInput, selectedQuarter);
+    const clockSeconds = parsedClockSeconds ?? quarterDuration(selectedQuarter);
+    const gameSeconds = quarterStartSeconds(selectedQuarter) + (quarterDuration(selectedQuarter) - clockSeconds);
+    const previousPlay = playsAsc
+      .filter((p) => p.eventNum !== initialPlay?.eventNum && p.gameSeconds <= gameSeconds)
+      .at(-1);
+    const nextPlay = playsAsc.find((p) => p.eventNum !== initialPlay?.eventNum && p.gameSeconds > gameSeconds);
+    const refPlay = previousPlay || nextPlay || playsAsc[0];
+    const quarter = selectedQuarter;
+    const clock = formatClockSeconds(clockSeconds);
     const scoring = isScoringType(eventType);
     const pts = shotPtsFor(eventType, made);
 
@@ -149,7 +144,7 @@ function AddPlayForm({ game, allPlays, onAdd, onSave, onCancel, initialPlay }) {
       eventNum: initialPlay?.eventNum ?? nextAddedId(),
       quarter,
       clock,
-      clockSeconds: refPlay?.clockSeconds ?? 0,
+      clockSeconds,
       gameSeconds,
       team,
       player,
@@ -159,7 +154,9 @@ function AddPlayForm({ game, allPlays, onAdd, onSave, onCancel, initialPlay }) {
       scoreB: refPlay?.scoreB ?? 0,
       editable: scoring,
       shotPts: pts,
-      added: true,
+      originalShotPts: initialPlay?.originalShotPts ?? initialPlay?.shotPts ?? 0,
+      added: initialPlay?.added ?? !initialPlay,
+      edited: Boolean(initialPlay && !initialPlay.added),
       addedEventType: eventType,
     };
   }
@@ -213,7 +210,7 @@ function AddPlayForm({ game, allPlays, onAdd, onSave, onCancel, initialPlay }) {
               <button
                 key={q}
                 type="button"
-                onClick={() => setSelectedQuarter(q)}
+                onClick={() => handleQuarterSelect(q)}
                 style={{ ...formStyles.quarterBtn, ...(selectedQuarter === q ? formStyles.quarterBtnActive : {}) }}
               >
                 {quarterLabel(q, maxQ)}
@@ -223,10 +220,10 @@ function AddPlayForm({ game, allPlays, onAdd, onSave, onCancel, initialPlay }) {
         </div>
 
         <div style={formStyles.row}>
-          <label style={formStyles.label}>{isEdit ? 'Position (insert after)' : 'Insert after'}</label>
+          <label style={formStyles.label}>{isEdit ? 'Position Shortcut' : 'Insert after'}</label>
           <select
             value={insertAfterIdx}
-            onChange={(e) => setInsertAfterIdx(Number(e.target.value))}
+            onChange={(e) => handleInsertAfterChange(Number(e.target.value))}
             style={{ ...formStyles.select, maxWidth: '360px' }}
           >
             <option value={-1}>— Start of {quarterLabel(selectedQuarter, maxQ)} —</option>
@@ -236,6 +233,16 @@ function AddPlayForm({ game, allPlays, onAdd, onSave, onCancel, initialPlay }) {
               </option>
             ))}
           </select>
+        </div>
+
+        <div style={formStyles.row}>
+          <label style={formStyles.label}>Exact Clock</label>
+          <input
+            value={clockInput}
+            onChange={(e) => setClockInput(e.target.value)}
+            placeholder="6:37"
+            style={formStyles.select}
+          />
         </div>
 
         <div style={formStyles.actions}>
@@ -296,6 +303,30 @@ function gameSecondsToTimeLabel(gameSeconds, boundaries, totalSeconds) {
   const min = Math.floor(remaining / 60);
   const sec = remaining % 60;
   return `${period.label} · ${min}:${String(sec).padStart(2, '0')} left`;
+}
+
+function quarterDuration(quarter) {
+  return quarter <= 4 ? 720 : 300;
+}
+
+function quarterStartSeconds(quarter) {
+  return quarter <= 4 ? (quarter - 1) * 720 : REGULATION_SECONDS + (quarter - 5) * 300;
+}
+
+function parseClockInput(value, quarter) {
+  const match = String(value).trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  const duration = quarterDuration(quarter);
+  const total = minutes * 60 + seconds;
+  if (seconds > 59 || total < 0 || total > duration) return null;
+  return total;
+}
+
+function formatClockSeconds(seconds) {
+  const safeSeconds = Math.max(0, Math.round(seconds));
+  return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, '0')}`;
 }
 
 // Kept as a fallback for the static QUARTER_BOUNDARIES reference in AddPlayForm
@@ -369,6 +400,113 @@ function computeScoreChanges(plays, wpCurve) {
 
   return scoreChanges;
 }
+
+function pointAtOrBefore(curve, gameSeconds) {
+  let result = curve[0] ?? null;
+  for (const point of curve) {
+    if ((point.gameSeconds ?? 0) <= gameSeconds) result = point;
+    else break;
+  }
+  return result;
+}
+
+function formatSignedNumber(value, suffix = '') {
+  const rounded = Math.round((value ?? 0) * 10) / 10;
+  if (rounded === 0) return `0${suffix}`;
+  return `${rounded > 0 ? '+' : ''}${rounded}${suffix}`;
+}
+
+function formatScore(point, teamA, teamB) {
+  return `${teamA} ${point?.scoreA ?? 0} - ${point?.scoreB ?? 0} ${teamB}`;
+}
+
+function ChangeImpactPanel({
+  hasChanges,
+  changeLabel,
+  originalCurve,
+  whatIfCurve,
+  originalPlays,
+  addedPlays,
+  editedPlays,
+  deletedEventNums,
+  viewingTeam,
+  teamA,
+  teamB,
+}) {
+  if (!hasChanges || !originalCurve.length || !whatIfCurve.length) return null;
+
+  const originalFinal = originalCurve.at(-1);
+  const whatIfFinal = whatIfCurve.at(-1);
+  const finalWpDelta = (whatIfFinal?.wp ?? 0) - (originalFinal?.wp ?? 0);
+
+  const deletedPlays = originalPlays.filter((p) => deletedEventNums.has(p.eventNum));
+  const changedPlays = [
+    ...addedPlays.map((play) => ({ play, label: 'Added' })),
+    ...Object.values(editedPlays).map((play) => ({ play, label: 'Edited' })),
+    ...deletedPlays.map((play) => ({ play, label: 'Deleted' })),
+  ].sort((a, b) => a.play.gameSeconds - b.play.gameSeconds);
+
+  return (
+    <div className="surface-card" style={changeImpactStyles.panel}>
+      <div style={changeImpactStyles.header}>
+        <div>
+          <div style={changeImpactStyles.title}>What changed</div>
+          <div style={changeImpactStyles.meta}>{changeLabel}</div>
+        </div>
+        <div style={changeImpactStyles.totals}>
+          <span style={changeImpactStyles.totalItem}>
+            {`Final WP ${(originalFinal?.wp ?? 0)}% -> ${(whatIfFinal?.wp ?? 0)}% for ${viewingTeam}`}
+            {finalWpDelta !== 0 && ` (${formatSignedNumber(finalWpDelta, '%')})`}
+          </span>
+          <span style={changeImpactStyles.totalItem}>
+            Theoretical final: {formatScore(whatIfFinal, teamA, teamB)}
+          </span>
+        </div>
+      </div>
+
+      {changedPlays.length > 0 && (
+        <div style={changeImpactStyles.rows}>
+          {changedPlays.slice(0, 8).map(({ play, label }) => {
+            const originalPoint = pointAtOrBefore(originalCurve, play.gameSeconds);
+            const whatIfPoint = pointAtOrBefore(whatIfCurve, play.gameSeconds);
+            const wpDelta = (whatIfPoint?.wp ?? 0) - (originalPoint?.wp ?? 0);
+            const wpColor = wpDelta > 0 ? '#16a34a' : wpDelta < 0 ? '#dc2626' : '#64748b';
+
+            return (
+              <div key={`${label}-${play.eventNum}`} style={changeImpactStyles.row}>
+                <span style={changeImpactStyles.badge}>{label}</span>
+                <span style={changeImpactStyles.time}>Q{play.quarter} {play.clock}</span>
+                <span style={changeImpactStyles.desc}>{play.description || play.eventType}</span>
+                <span style={{ ...changeImpactStyles.wpDelta, color: wpColor }}>
+                  {`WP ${originalPoint?.wp ?? 0}% -> ${whatIfPoint?.wp ?? 0}%`}
+                </span>
+                <span style={changeImpactStyles.scoreDelta}>
+                  {`${formatScore(originalPoint, teamA, teamB)} -> ${formatScore(whatIfPoint, teamA, teamB)}`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const changeImpactStyles = {
+  panel: { background: '#fff', borderRadius: '8px', padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '16px' },
+  header: { display: 'flex', justifyContent: 'space-between', gap: '18px', alignItems: 'flex-start', flexWrap: 'wrap' },
+  title: { fontSize: '13px', fontWeight: '700', color: '#1a1a1a', marginBottom: '4px' },
+  meta: { fontSize: '11px', color: '#94a3b8' },
+  totals: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' },
+  totalItem: { fontSize: '12px', fontWeight: '700', color: '#1f2937', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '5px 8px' },
+  rows: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '12px' },
+  row: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, paddingTop: '6px', borderTop: '1px solid #f1f5f9' },
+  badge: { width: 52, fontSize: '10px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' },
+  time: { width: 66, fontSize: '11px', color: '#64748b', flexShrink: 0 },
+  desc: { flex: 1, minWidth: 120, fontSize: '12px', color: '#1f2937', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  wpDelta: { width: 96, textAlign: 'right', fontSize: '12px', fontWeight: '700', flexShrink: 0 },
+  scoreDelta: { width: 330, fontSize: '11px', color: '#64748b', textAlign: 'right', flexShrink: 0 },
+};
 
 // Shared chart content so both inline and expanded views use the same rendering
 function WinProbChartContent({ data, color, teamA, teamB, height, showBrush, domain, onBrushChange, maxQuarter, swings }) {
@@ -700,7 +838,10 @@ export default function PlayEditor({ season, seasonType }) {
   const [error, setError] = useState(null);
   const [overrides, setOverrides] = useState({});
   const [addedPlays, setAddedPlays] = useState([]);
+  const [editedPlays, setEditedPlays] = useState({});
   const [deletedEventNums, setDeletedEventNums] = useState(new Set());
+  const [selectedEventNums, setSelectedEventNums] = useState(new Set());
+  const [deleteScope, setDeleteScope] = useState('single');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingPlay, setEditingPlay] = useState(null);
   const [quarterFilter, setQuarterFilter] = useState('all');
@@ -711,7 +852,9 @@ export default function PlayEditor({ season, seasonType }) {
     setGame(null);
     setOverrides({});
     setAddedPlays([]);
+    setEditedPlays({});
     setDeletedEventNums(new Set());
+    setSelectedEventNums(new Set());
     setShowAddForm(false);
     setEditingPlay(null);
   }, [season, seasonType]);
@@ -722,7 +865,9 @@ export default function PlayEditor({ season, seasonType }) {
     setError(null);
     setOverrides({});
     setAddedPlays([]);
+    setEditedPlays({});
     setDeletedEventNums(new Set());
+    setSelectedEventNums(new Set());
     setShowAddForm(false);
     setEditingPlay(null);
     setPerspectiveTeam('A');
@@ -734,7 +879,7 @@ export default function PlayEditor({ season, seasonType }) {
   const handleOverride = useCallback((eventNum, result) => {
     setOverrides((prev) => {
       const next = { ...prev };
-      const allPlays = [...(game?.plays ?? []), ...addedPlays];
+      const allPlays = [...(game?.plays ?? []).map((p) => editedPlays[p.eventNum] ?? p), ...addedPlays];
       const play = allPlays.find((p) => p.eventNum === eventNum);
       const originalResult = play?.shotPts > 0 ? 'Made' : 'Missed';
       if (result === originalResult && !play?.added) {
@@ -744,7 +889,7 @@ export default function PlayEditor({ season, seasonType }) {
       }
       return next;
     });
-  }, [game, addedPlays]);
+  }, [game, addedPlays, editedPlays]);
 
   const handleAddPlay = useCallback((play) => {
     setAddedPlays((prev) => [...prev, play]);
@@ -752,23 +897,68 @@ export default function PlayEditor({ season, seasonType }) {
   }, []);
 
   const handleSaveEdit = useCallback((updatedPlay) => {
-    setAddedPlays((prev) => prev.map((p) => p.eventNum === updatedPlay.eventNum ? updatedPlay : p));
+    if (updatedPlay.added) {
+      setAddedPlays((prev) => prev.map((p) => p.eventNum === updatedPlay.eventNum ? updatedPlay : p));
+    } else {
+      setEditedPlays((prev) => ({ ...prev, [updatedPlay.eventNum]: updatedPlay }));
+    }
     setEditingPlay(null);
   }, []);
 
-  const handleDeletePlay = useCallback((eventNum, isAdded) => {
-    if (isAdded) {
-      setAddedPlays((prev) => prev.filter((p) => p.eventNum !== eventNum));
-    } else {
-      setDeletedEventNums((prev) => new Set([...prev, eventNum]));
-      // Clear any override for this play since it's being removed
-      setOverrides((prev) => {
-        const next = { ...prev };
-        delete next[eventNum];
-        return next;
-      });
-    }
+  const clearOverridesFor = useCallback((eventNums) => {
+    setOverrides((prev) => {
+      const next = { ...prev };
+      for (const eventNum of eventNums) delete next[eventNum];
+      return next;
+    });
   }, []);
+
+  const handleDeletePlay = useCallback((eventNum) => {
+    const plays = [...(game?.plays ?? []).map((p) => editedPlays[p.eventNum] ?? p), ...addedPlays];
+    const target = plays.find((p) => p.eventNum === eventNum);
+    if (!target) return;
+    const eventNums = deleteScope === 'later'
+      ? plays.filter((p) => p.gameSeconds >= target.gameSeconds).map((p) => p.eventNum)
+      : [eventNum];
+
+    setAddedPlays((prev) => prev.filter((p) => !eventNums.includes(p.eventNum)));
+    setEditedPlays((prev) => {
+      const next = { ...prev };
+      for (const deletedEventNum of eventNums) delete next[deletedEventNum];
+      return next;
+    });
+    const originalEventNums = eventNums.filter((deletedEventNum) =>
+      (game?.plays ?? []).some((p) => p.eventNum === deletedEventNum)
+    );
+    if (originalEventNums.length > 0) {
+      setDeletedEventNums((prev) => new Set([...prev, ...originalEventNums]));
+    } else {
+      setDeletedEventNums((prev) => new Set(prev));
+    }
+    setSelectedEventNums((prev) => {
+      const next = new Set(prev);
+      for (const deletedEventNum of eventNums) next.delete(deletedEventNum);
+      return next;
+    });
+    clearOverridesFor(eventNums);
+  }, [addedPlays, clearOverridesFor, deleteScope, editedPlays, game]);
+
+  const handleDeleteSelected = useCallback(() => {
+    const eventNums = [...selectedEventNums];
+    if (!eventNums.length) return;
+    setAddedPlays((prev) => prev.filter((p) => !eventNums.includes(p.eventNum)));
+    setEditedPlays((prev) => {
+      const next = { ...prev };
+      for (const eventNum of eventNums) delete next[eventNum];
+      return next;
+    });
+    const originalEventNums = eventNums.filter((eventNum) =>
+      (game?.plays ?? []).some((p) => p.eventNum === eventNum)
+    );
+    setDeletedEventNums((prev) => new Set([...prev, ...originalEventNums]));
+    clearOverridesFor(eventNums);
+    setSelectedEventNums(new Set());
+  }, [clearOverridesFor, game, selectedEventNums]);
 
   const handleRestorePlay = useCallback((eventNum) => {
     setDeletedEventNums((prev) => {
@@ -778,11 +968,24 @@ export default function PlayEditor({ season, seasonType }) {
     });
   }, []);
 
+  const toggleSelectedPlay = useCallback((eventNum) => {
+    setSelectedEventNums((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventNum)) next.delete(eventNum);
+      else next.add(eventNum);
+      return next;
+    });
+  }, []);
+
   // allPlays includes added plays but not deleted originals
-  const allPlays = game
-    ? [...game.plays.filter((p) => !deletedEventNums.has(p.eventNum)), ...addedPlays]
-    : [];
-  const hasChanges = Object.keys(overrides).length > 0 || addedPlays.length > 0 || deletedEventNums.size > 0;
+  const allPlays = useMemo(() => (
+    game
+      ? [...game.plays.map((p) => editedPlays[p.eventNum] ?? p).filter((p) => !deletedEventNums.has(p.eventNum)), ...addedPlays]
+        .slice()
+        .sort((a, b) => a.gameSeconds - b.gameSeconds || a.eventNum - b.eventNum)
+      : []
+  ), [addedPlays, deletedEventNums, editedPlays, game]);
+  const hasChanges = Object.keys(overrides).length > 0 || addedPlays.length > 0 || Object.keys(editedPlays).length > 0 || deletedEventNums.size > 0;
 
   const [whatIfCurve, setWhatIfCurve] = useState([]);
   const wpDebounceRef = useRef(null);
@@ -790,14 +993,14 @@ export default function PlayEditor({ season, seasonType }) {
     if (!game) { setWhatIfCurve([]); return; }
     if (!hasChanges) { setWhatIfCurve(game.wpCurve); return; }
     if (wpDebounceRef.current) clearTimeout(wpDebounceRef.current);
-    const plays = [...game.plays, ...addedPlays];
+    const plays = allPlays;
     wpDebounceRef.current = setTimeout(() => {
-      recomputeWpCurveRemote(plays, overrides, game.teamA)
+      recomputeWpCurveRemote(plays, overrides, game.teamA, game.bettingLine ?? 0)
         .then(setWhatIfCurve)
         .catch(() => {});
     }, 300);
     return () => clearTimeout(wpDebounceRef.current);
-  }, [game, addedPlays, overrides, hasChanges]);
+  }, [game, allPlays, overrides, hasChanges]);
 
   const quarters = [...new Set(allPlays.map((p) => p.quarter))].sort((a, b) => a - b);
   const filteredPlays = (quarterFilter === 'all' ? allPlays : allPlays.filter((p) => p.quarter === Number(quarterFilter)))
@@ -806,6 +1009,7 @@ export default function PlayEditor({ season, seasonType }) {
   const changeLabel = (() => {
     const parts = [];
     if (addedPlays.length > 0) parts.push(`${addedPlays.length} added`);
+    if (Object.keys(editedPlays).length > 0) parts.push(`${Object.keys(editedPlays).length} play details changed`);
     if (Object.keys(overrides).length > 0) parts.push(`${Object.keys(overrides).length} edited`);
     if (deletedEventNums.size > 0) parts.push(`${deletedEventNums.size} deleted`);
     return parts.join(', ');
@@ -837,7 +1041,7 @@ export default function PlayEditor({ season, seasonType }) {
           onGameChange={setGameId}
         />
         {hasChanges && (
-          <button onClick={() => { setOverrides({}); setAddedPlays([]); setDeletedEventNums(new Set()); }} style={styles.resetBtn}>
+          <button onClick={() => { setOverrides({}); setAddedPlays([]); setEditedPlays({}); setDeletedEventNums(new Set()); setSelectedEventNums(new Set()); }} style={styles.resetBtn}>
             Reset ({changeLabel})
           </button>
         )}
@@ -851,6 +1055,7 @@ export default function PlayEditor({ season, seasonType }) {
           <div style={styles.subtitleRow}>
             <span style={styles.subtitle}>
               {game.teamA} {game.plays.at(-1)?.scoreA ?? '—'} – {game.plays.at(-1)?.scoreB ?? '—'} {game.teamB}
+              {game.bettingLine !== undefined && ` · line ${game.bettingLine > 0 ? '+' : ''}${game.bettingLine}`}
             </span>
             <div style={styles.perspectiveRow}>
               <label style={styles.perspectiveLabel}>Viewing:</label>
@@ -877,7 +1082,19 @@ export default function PlayEditor({ season, seasonType }) {
             />
           </div>
 
-          <ModelWinProb wpCurve={displayWhatIf} teamA={viewingTeam} />
+          <ChangeImpactPanel
+            hasChanges={hasChanges}
+            changeLabel={changeLabel}
+            originalCurve={displayOriginal}
+            whatIfCurve={displayWhatIf}
+            originalPlays={game.plays}
+            addedPlays={addedPlays}
+            editedPlays={editedPlays}
+            deletedEventNums={deletedEventNums}
+            viewingTeam={viewingTeam}
+            teamA={game.teamA}
+            teamB={game.teamB}
+          />
 
           <TopImpactsPanel
             plays={allPlays}
@@ -910,29 +1127,50 @@ export default function PlayEditor({ season, seasonType }) {
                   {q === 'all' ? 'All' : `Q${q}`}
                 </button>
               ))}
+              <span style={styles.filterSpacer} />
+              <label style={styles.filterLabel}>Delete:</label>
+              <select value={deleteScope} onChange={(e) => setDeleteScope(e.target.value)} style={styles.deleteScopeSelect}>
+                <option value="single">This play</option>
+                <option value="later">This + later</option>
+              </select>
+              {selectedEventNums.size > 0 && (
+                <button onClick={handleDeleteSelected} style={styles.bulkDeleteBtn}>
+                  Delete Selected ({selectedEventNums.size})
+                </button>
+              )}
             </div>
 
             <div className="responsive-scroll" style={styles.table}>
               <div className="responsive-table">
               <div style={styles.tableHeader}>
+                <span style={{ width: 28 }}></span>
                 <span style={{ width: 80 }}>Time</span>
                 <span style={{ flex: 1 }}>Description</span>
                 <span style={{ width: 100 }}>Outcome</span>
                 <span style={{ width: 72, textAlign: 'right' }}>WP Impact</span>
-                <span style={{ width: 56, textAlign: 'right' }}></span>
+                <span style={{ width: 68, textAlign: 'right' }}></span>
               </div>
               {filteredPlays.map((play) => {
                 const isEdited = overrides[play.eventNum] !== undefined;
+                const isDetailEdited = Boolean(play.edited);
                 const currentResult = overrides[play.eventNum] ?? (play.shotPts > 0 ? 'Made' : 'Missed');
                 const impact = playImpacts.get(play.eventNum);
                 const impactAbs = impact != null ? Math.abs(impact) : 0;
                 const impactColor = impact == null ? '#ccc' : impact > 0 ? '#16a34a' : impact < 0 ? '#dc2626' : '#999';
                 const impactLabel = impact == null ? '—' : `${impact > 0 ? '+' : ''}${impact}%`;
                 return (
-                  <div className="table-row-interactive" key={play.eventNum} style={{ ...styles.tableRow, ...(play.added ? styles.tableRowAdded : isEdited ? styles.tableRowEdited : {}) }}>
+                  <div className="table-row-interactive" key={play.eventNum} style={{ ...styles.tableRow, ...(play.added ? styles.tableRowAdded : (isEdited || isDetailEdited) ? styles.tableRowEdited : {}) }}>
+                    <span style={styles.selectCell}>
+                      <input
+                        type="checkbox"
+                        checked={selectedEventNums.has(play.eventNum)}
+                        onChange={() => toggleSelectedPlay(play.eventNum)}
+                      />
+                    </span>
                     <span style={styles.timeCell}>
                       Q{play.quarter} {play.clock}
                       {play.added && <span style={styles.addedBadge}>new</span>}
+                      {isDetailEdited && <span style={styles.editedBadge}>edit</span>}
                     </span>
                     <span style={styles.descCell}>{play.description || '—'}</span>
                     <span style={{ width: 100 }}>
@@ -953,16 +1191,14 @@ export default function PlayEditor({ season, seasonType }) {
                       {impactLabel}
                     </span>
                     <span style={styles.rowActions}>
-                      {play.added && (
-                        <button
-                          title="Edit play"
-                          onClick={() => setEditingPlay(play)}
-                          style={styles.rowActionBtn}
-                        >✎</button>
-                      )}
+                      <button
+                        title="Edit play"
+                        onClick={() => setEditingPlay(play)}
+                        style={styles.rowActionBtn}
+                      >✎</button>
                       <button
                         title="Delete play"
-                        onClick={() => handleDeletePlay(play.eventNum, !!play.added)}
+                        onClick={() => handleDeletePlay(play.eventNum)}
                         style={{ ...styles.rowActionBtn, ...styles.rowDeleteBtn }}
                       >×</button>
                     </span>
@@ -973,6 +1209,7 @@ export default function PlayEditor({ season, seasonType }) {
               {[...(game?.plays ?? [])].filter((p) => deletedEventNums.has(p.eventNum) &&
                 (quarterFilter === 'all' || p.quarter === Number(quarterFilter))).map((play) => (
                 <div key={play.eventNum} style={{ ...styles.tableRow, ...styles.tableRowDeleted }}>
+                  <span style={styles.selectCell}></span>
                   <span style={{ ...styles.timeCell, opacity: 0.5 }}>Q{play.quarter} {play.clock}</span>
                   <span style={{ ...styles.descCell, opacity: 0.5, textDecoration: 'line-through' }}>{play.description || '—'}</span>
                   <span style={{ width: 100 }}><span style={styles.deletedBadge}>deleted</span></span>
@@ -1040,13 +1277,18 @@ const styles = {
   filterLabel: { fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' },
   filterBtn: { padding: '4px 10px', borderRadius: '4px', border: '1px solid #e0e0e0', background: '#fafafa', fontSize: '12px', cursor: 'pointer', color: '#555' },
   filterBtnActive: { background: '#1a1a1a', color: '#fff', border: '1px solid #1a1a1a' },
+  filterSpacer: { flex: 1 },
+  deleteScopeSelect: { padding: '4px 8px', borderRadius: '4px', border: '1px solid #e0e0e0', background: '#fafafa', fontSize: '12px', color: '#555' },
+  bulkDeleteBtn: { padding: '4px 10px', borderRadius: '4px', border: '1px solid #fca5a5', background: '#fff5f5', color: '#dc2626', fontSize: '12px', fontWeight: '600', cursor: 'pointer' },
   table: { maxHeight: '400px', overflowY: 'auto' },
   tableHeader: { display: 'flex', gap: '8px', padding: '6px 8px', background: '#f5f5f5', borderRadius: '4px', fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px', position: 'sticky', top: 0 },
   tableRow: { display: 'flex', gap: '8px', alignItems: 'center', padding: '6px 8px', borderBottom: '1px solid #f5f5f5' },
   tableRowEdited: { background: '#fff8f0' },
   tableRowAdded: { background: '#f0fdf4', borderLeft: '3px solid #16a34a' },
+  selectCell: { width: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' },
   timeCell: { width: 80, fontSize: '12px', color: '#666', fontWeight: '600', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '4px' },
   addedBadge: { fontSize: '10px', fontWeight: '700', color: '#16a34a', background: '#dcfce7', borderRadius: '3px', padding: '1px 4px', textTransform: 'uppercase', letterSpacing: '0.04em' },
+  editedBadge: { fontSize: '10px', fontWeight: '700', color: '#b45309', background: '#fef3c7', borderRadius: '3px', padding: '1px 4px', textTransform: 'uppercase', letterSpacing: '0.04em' },
   addPlayBtn: { padding: '6px 14px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '13px', fontWeight: '600', cursor: 'pointer' },
   descCell: { flex: 1, fontSize: '13px', color: '#1a1a1a' },
   outcomeSelect: { padding: '3px 6px', borderRadius: '4px', border: '1px solid #d0d0d0', fontSize: '12px', cursor: 'pointer', background: '#fafafa', width: '80px' },
@@ -1054,7 +1296,7 @@ const styles = {
   nonEditable: { color: '#ccc', fontSize: '13px' },
   tableRowDeleted: { background: '#fef2f2', borderLeft: '3px solid #dc2626', opacity: 0.75 },
   deletedBadge: { fontSize: '10px', fontWeight: '700', color: '#dc2626', background: '#fee2e2', borderRadius: '3px', padding: '1px 4px', textTransform: 'uppercase', letterSpacing: '0.04em' },
-  rowActions: { width: 56, display: 'flex', justifyContent: 'flex-end', gap: '4px', flexShrink: 0 },
+  rowActions: { width: 68, display: 'flex', justifyContent: 'flex-end', gap: '4px', flexShrink: 0 },
   rowActionBtn: { padding: '2px 6px', borderRadius: '4px', border: '1px solid #d0d0d0', background: '#fafafa', color: '#555', fontSize: '13px', cursor: 'pointer', lineHeight: 1.2 },
   rowDeleteBtn: { color: '#dc2626', border: '1px solid #fca5a5', background: '#fff5f5' },
   rowRestoreBtn: { color: '#16a34a', border: '1px solid #86efac', background: '#f0fdf4' },

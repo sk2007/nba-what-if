@@ -65,12 +65,12 @@ export async function fetchKalshiProps(gameSuffix, series) {
   return data.markets || [];
 }
 
-export function recomputeWpCurveRemote(plays, overrides, teamA) {
+export function recomputeWpCurveRemote(plays, overrides, teamA, line = 0) {
   return withRetry(async () => {
     const res = await fetch('/api/wp/recompute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ teamA, plays, overrides }),
+      body: JSON.stringify({ teamA, plays, overrides, line }),
     });
     if (!res.ok) throw new Error(`WP recompute HTTP ${res.status}`);
     const data = await res.json();
