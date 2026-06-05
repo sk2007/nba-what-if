@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 import { fetchSeasons } from '../api/nbaApi';
 
-export default function SeasonSelector({ season, onSeasonChange }) {
+export default function SeasonSelector({ season, onSeasonChange, seasonType, onSeasonTypeChange }) {
   const [seasons, setSeasons] = useState([]);
+  const [seasonTypes, setSeasonTypes] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchSeasons()
-      .then((data) => setSeasons(data.seasons))
+      .then((data) => {
+        setSeasons(data.seasons);
+        setSeasonTypes(data.seasonTypes ?? []);
+      })
       .catch((e) => setError(e.message));
   }, []);
 
@@ -23,6 +27,16 @@ export default function SeasonSelector({ season, onSeasonChange }) {
           ))}
         </select>
       </div>
+      {seasonType && onSeasonTypeChange && (
+        <div style={styles.group}>
+          <label style={styles.label}>Type</label>
+          <select className="app-select" value={seasonType} onChange={(e) => onSeasonTypeChange(e.target.value)} style={styles.select}>
+            {seasonTypes.map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }

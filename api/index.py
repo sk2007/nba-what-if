@@ -20,7 +20,7 @@ def seasons():
     available_seasons = get_available_seasons()
     return jsonify({
         "seasons": [{"id": s, "label": s} for s in available_seasons],
-        "seasonTypes": ["Regular Season"],
+        "seasonTypes": ["Regular Season", "Playoffs"],
     })
 
 

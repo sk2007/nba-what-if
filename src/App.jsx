@@ -104,6 +104,7 @@ function KalshiPasswordGate({ onUnlock }) {
 
 export default function App() {
   const [season, setSeason] = useState('2024-25');
+  const [seasonType, setSeasonType] = useState('Regular Season');
   const [tab, setTab] = useState('Play Editor');
   const [kalshiUnlocked, setKalshiUnlocked] = useState(
     () => sessionStorage.getItem(KALSHI_UNLOCK_KEY) === 'true'
@@ -113,10 +114,19 @@ export default function App() {
 
   useEffect(() => {
     setGames([]);
-    fetchGames(season, 'Regular Season')
+    fetchGames(season, seasonType)
       .then((data) => setGames(data.games ?? []))
       .catch(() => {});
-  }, [season]);
+  }, [season, seasonType]);
+
+  const seasonControls = (
+    <SeasonSelector
+      season={season}
+      onSeasonChange={setSeason}
+      seasonType={seasonType}
+      onSeasonTypeChange={setSeasonType}
+    />
+  );
 
   return (
     <div className="app-shell">
@@ -158,22 +168,22 @@ export default function App() {
 
       {tab === 'Play Editor' && (
         <>
-          <SeasonSelector season={season} onSeasonChange={setSeason} />
-          <PlayEditor season={season} seasonType="Regular Season" />
+          {seasonControls}
+          <PlayEditor season={season} seasonType={seasonType} />
         </>
       )}
 
       {tab === 'Game Comparison' && (
         <>
-          <SeasonSelector season={season} onSeasonChange={setSeason} />
-          <GameComparison season={season} seasonType="Regular Season" />
+          {seasonControls}
+          <GameComparison season={season} seasonType={seasonType} />
         </>
       )}
 
       {tab === 'Clutch Index' && (
         <>
-          <SeasonSelector season={season} onSeasonChange={setSeason} />
-          <ClutchIndex season={season} seasonType="Regular Season" games={games} />
+          {seasonControls}
+          <ClutchIndex season={season} seasonType={seasonType} games={games} />
         </>
       )}
 
