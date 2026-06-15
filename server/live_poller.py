@@ -34,10 +34,18 @@ class EventBus:
         return q
 
     def unsubscribe(self, game_id, q):
+        poller = None
         with self._lock:
             subs = self._subscribers.get(game_id)
             if subs and q in subs:
                 subs.remove(q)
+            # When the last subscriber leaves, stop the poller so it doesn't
+            # keep hitting the NBA API for a game nobody is watching.
+            if subs is not None and not subs:
+                self._subscribers.pop(game_id, None)
+                poller = self._pollers.pop(game_id, None)
+        if poller is not None:
+            poller.stop()
 
     def publish(self, game_id, event):
         with self._lock:
@@ -59,10 +67,15 @@ class GamePoller:
         self.bus = bus
         self.last_event_num = 0
         self.consecutive_failures = 0
+        self._stopped = False
         self._thread = threading.Thread(target=self.run, daemon=True)
 
     def start(self):
         self._thread.start()
+
+    def stop(self):
+        """Signal the poll loop to exit at its next iteration."""
+        self._stopped = True
 
     def _poll_once(self):
         """One poll cycle. Returns True when the game is finished."""
@@ -92,7 +105,7 @@ class GamePoller:
         return game.get("status") == "finished"
 
     def run(self):
-        while True:
+        while not self._stopped:
             finished = self._poll_once()
             if finished:
                 self.bus.publish(self.game_id, {
@@ -106,7 +119,14 @@ class GamePoller:
                 })
                 self.bus.close_game(self.game_id)
                 return
-            time.sleep(POLL_INTERVAL_SECONDS)
+            self._interruptible_sleep(POLL_INTERVAL_SECONDS)
+
+    def _interruptible_sleep(self, seconds):
+        """Sleep in short slices so stop() takes effect promptly."""
+        slept = 0.0
+        while slept < seconds and not self._stopped:
+            time.sleep(min(1.0, seconds - slept))
+            slept += 1.0
 
 
 # Module-level singleton used by the Flask app.
