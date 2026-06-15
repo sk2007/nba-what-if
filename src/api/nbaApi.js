@@ -78,6 +78,17 @@ export function recomputeWpCurveRemote(plays, overrides, teamA, line = 0) {
   });
 }
 
+// Opens an SSE connection for a live game. Returns a cleanup function that
+// closes the stream. Handlers are optional.
+export function subscribeToGame(gameId, { onPlay, onWP, onStatus } = {}) {
+  const es = new EventSource(`/api/games/${gameId}/stream`);
+  if (onPlay) es.addEventListener('play', (e) => onPlay(JSON.parse(e.data)));
+  if (onWP) es.addEventListener('wp', (e) => onWP(JSON.parse(e.data)));
+  if (onStatus) es.addEventListener('status', (e) => onStatus(JSON.parse(e.data)));
+  es.onerror = () => es.close();
+  return () => es.close();
+}
+
 export function recomputeWpCurve(plays, overrides, teamA, totalSeconds = 2880) {
   let scoreA = 0;
   let scoreB = 0;
