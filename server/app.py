@@ -1,10 +1,12 @@
-from flask import Flask, jsonify, request
+import json
+from flask import Flask, jsonify, request, Response, stream_with_context
 from flask_cors import CORS
 import os
 import pandas as pd
 import requests as http_requests
 from dotenv import load_dotenv
 from server.nba_client import get_available_seasons, get_games, get_play_by_play, is_selectable_season
+from server.live_poller import event_bus
 
 load_dotenv()
 
@@ -41,6 +43,23 @@ def play_by_play(game_id):
         return jsonify(get_play_by_play(game_id))
     except Exception as e:
         return jsonify({"error": str(e)}), 503
+
+
+@app.get("/api/games/<game_id>/stream")
+def stream(game_id):
+    q = event_bus.subscribe(game_id)
+
+    def generate():
+        try:
+            while True:
+                event = q.get()
+                if event is None:
+                    break
+                yield f"event: {event['type']}\ndata: {json.dumps(event['data'])}\n\n"
+        finally:
+            event_bus.unsubscribe(game_id, q)
+
+    return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
 
 @app.get("/api/games/<game_id>/boxscore")
