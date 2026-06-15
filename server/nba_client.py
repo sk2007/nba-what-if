@@ -15,6 +15,7 @@ _NBA_LIVE_HEADERS = {
 _cache = {}
 _CACHE_DIR = Path(__file__).resolve().parent / "cache"
 MIN_SELECTABLE_SEASON_START = 2020
+_GAME_STATUS = {1: "upcoming", 2: "live", 3: "finished"}
 
 
 def _cached(key, fn):
@@ -102,11 +103,13 @@ def _read_cached_games(season, season_type):
         return json.load(f)
 
 
-def get_play_by_play(game_id):
+def get_play_by_play(game_id, live=False):
     """
-    Returns dict: { gameId, teamA, teamB, plays, wpCurve }
-    plays: list of play dicts (see spec)
+    Returns dict: { gameId, teamA, teamB, bettingLine, plays, wpCurve, status }
+    When live=True, bypass the in-memory cache (always re-fetch).
     """
+    if live:
+        return _fetch_play_by_play(game_id)
     key = f"pbp:{game_id}"
     return _cached(key, lambda: _fetch_play_by_play(game_id))
 
@@ -138,28 +141,39 @@ def _parse_cdn_clock(clock_str, quarter):
     return display, clock_seconds, game_seconds
 
 
-def _fetch_play_by_play(game_id):
-    from nba_api.live.nba.endpoints import boxscore, playbyplay
+def _raw_pbp(game_id):
+    from nba_api.live.nba.endpoints import playbyplay
+    return playbyplay.PlayByPlay(
+        game_id=game_id,
+        headers=_NBA_LIVE_HEADERS,
+        timeout=15,
+    ).nba_response.get_dict()
+
+
+def _raw_box(game_id):
+    from nba_api.live.nba.endpoints import boxscore
+    return boxscore.BoxScore(
+        game_id=game_id,
+        headers=_NBA_LIVE_HEADERS,
+        timeout=15,
+    ).nba_response.get_dict()
+
+
+def _build_game(game_id):
+    """Fetch live PBP + boxscore and build the game dict.
+    Returns (game_dict, status) where status is upcoming|live|finished."""
     from server.betting_lines import get_pregame_line
     from server.wp_mlp import compute_wp_curve
 
-    pbp_data = playbyplay.PlayByPlay(
-        game_id=game_id,
-        headers=_NBA_LIVE_HEADERS,
-        timeout=15,
-    ).nba_response.get_dict()
-    actions = pbp_data["game"]["actions"]
+    pbp_data = _raw_pbp(game_id)
+    game_node = pbp_data["game"]
+    status = _GAME_STATUS.get(game_node.get("gameStatus", 3), "finished")
+    actions = game_node["actions"]
 
-    box_data = boxscore.BoxScore(
-        game_id=game_id,
-        headers=_NBA_LIVE_HEADERS,
-        timeout=15,
-    ).nba_response.get_dict()
-    box_game = box_data["game"]
-
+    box_game = _raw_box(game_id)["game"]
     home = box_game["homeTeam"]
     away = box_game["awayTeam"]
-    team_a = f"{home['teamCity']} {home['teamName']}"  # home = teamA
+    team_a = f"{home['teamCity']} {home['teamName']}"
     team_b = f"{away['teamCity']} {away['teamName']}"
     home_id = home["teamId"]
     game_date = (
@@ -170,7 +184,6 @@ def _fetch_play_by_play(game_id):
     )[:10]
     betting_line = get_pregame_line(team_a, team_b, game_date)
 
-    # Build nameI → full name map from boxscore roster
     name_map = {}
     for p in home.get("players", []) + away.get("players", []):
         name_i = p.get("nameI", "")
@@ -181,16 +194,11 @@ def _fetch_play_by_play(game_id):
     plays = []
     score_a = 0
     score_b = 0
-
     for action in actions:
-        action_type = action.get("actionType", "")
         quarter = action.get("period", 0)
         if not quarter:
             continue
-
         clock_display, clock_seconds, game_seconds = _parse_cdn_clock(action.get("clock", ""), quarter)
-
-        # scoreHome = teamA (home), scoreAway = teamB (away)
         score_str_a = action.get("scoreHome", "")
         score_str_b = action.get("scoreAway", "")
         if score_str_a:
@@ -199,15 +207,11 @@ def _fetch_play_by_play(game_id):
                 score_b = int(score_str_b)
             except ValueError:
                 pass
-
         event_type, editable, shot_pts, added_event_type = _classify_cdn_event(action)
-
         team_id = action.get("teamId")
         team_full = team_a if team_id == home_id else (team_b if team_id else None)
-
         name_i = action.get("playerNameI") or None
         player = name_map.get(name_i, name_i) if name_i else None
-
         play = {
             "eventNum": action.get("actionNumber", 0),
             "clock": clock_display,
@@ -229,15 +233,27 @@ def _fetch_play_by_play(game_id):
         plays.append(play)
 
     wp_curve = compute_wp_curve(plays, team_a, line=betting_line)
-
-    return {
+    game = {
         "gameId": game_id,
         "teamA": team_a,
         "teamB": team_b,
         "bettingLine": betting_line,
         "plays": plays,
         "wpCurve": wp_curve,
+        "status": status,
     }
+    return game, status
+
+
+def _fetch_play_by_play(game_id):
+    game, _ = _build_game(game_id)
+    return game
+
+
+def get_game_status(game_id):
+    """Return upcoming|live|finished from the live PBP payload only (no box fetch)."""
+    status_code = _raw_pbp(game_id)["game"].get("gameStatus", 3)
+    return _GAME_STATUS.get(status_code, "finished")
 
 
 def _classify_cdn_event(action):

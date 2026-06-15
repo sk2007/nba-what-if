@@ -3,7 +3,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer, Brush,
 } from 'recharts';
-import { fetchPlayByPlay, recomputeWpCurveRemote } from '../api/nbaApi';
+import { fetchPlayByPlay, recomputeWpCurveRemote, subscribeToGame } from '../api/nbaApi';
 import GameSelector from './GameSelector';
 import Spinner from './Spinner';
 
@@ -851,6 +851,7 @@ export default function PlayEditor({ season, seasonType }) {
   const [editingPlay, setEditingPlay] = useState(null);
   const [quarterFilter, setQuarterFilter] = useState('all');
   const [perspectiveTeam, setPerspectiveTeam] = useState('A');
+  const [liveError, setLiveError] = useState(false);
 
   useEffect(() => {
     setGameId(null);
@@ -880,6 +881,35 @@ export default function PlayEditor({ season, seasonType }) {
       .then((data) => { setGame(data); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, [gameId]);
+
+  // Subscribe to live updates when the loaded game is in progress.
+  useEffect(() => {
+    if (!game || game.status !== 'live') return;
+    setLiveError(false);
+
+    const cleanup = subscribeToGame(gameId, {
+      onPlay: (play) => {
+        setLiveError(false);
+        setGame((prev) => {
+          if (!prev) return prev;
+          if (prev.plays.some((p) => p.eventNum === play.eventNum)) return prev;
+          return { ...prev, plays: [...prev.plays, play] };
+        });
+      },
+      onWP: ({ wpCurve }) => {
+        setGame((prev) => (prev ? { ...prev, wpCurve } : prev));
+      },
+      onStatus: ({ gameStatus }) => {
+        if (gameStatus === 'finished') {
+          setGame((prev) => (prev ? { ...prev, status: 'finished' } : prev));
+        } else if (gameStatus === 'error') {
+          setLiveError(true);
+        }
+      },
+      onError: () => setLiveError(true),
+    });
+    return cleanup;
+  }, [game?.status, gameId]);
 
   const handleOverride = useCallback((eventNum, result) => {
     setOverrides((prev) => {
@@ -1059,6 +1089,9 @@ export default function PlayEditor({ season, seasonType }) {
         <>
           <div style={styles.subtitleRow}>
             <span style={styles.subtitle}>
+              {game.status === 'live' && <span style={styles.liveBadge}>● LIVE</span>}
+              {game.status === 'live' && liveError && <span style={styles.liveErrorBadge}>⚠ updates delayed</span>}
+              {game.status === 'finished' && game.plays.length > 0 && <span style={styles.finalBadge}>FINAL</span>}
               {game.teamA} {game.plays.at(-1)?.scoreA ?? '—'} – {game.plays.at(-1)?.scoreB ?? '—'} {game.teamB}
               {game.bettingLine !== undefined && ` · line ${game.bettingLine > 0 ? '+' : ''}${game.bettingLine}`}
             </span>
@@ -1264,6 +1297,9 @@ const styles = {
   errorText: { color: '#dc2626', fontSize: '13px', padding: '12px 0' },
   subtitleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' },
   subtitle: { fontSize: '13px', color: '#666' },
+  liveBadge: { color: '#dc2626', fontWeight: '700', fontSize: '12px', marginRight: '10px', letterSpacing: '0.03em' },
+  finalBadge: { color: '#64748b', fontWeight: '700', fontSize: '12px', marginRight: '10px', letterSpacing: '0.03em' },
+  liveErrorBadge: { color: '#b45309', fontWeight: '600', fontSize: '12px', marginRight: '10px' },
   perspectiveRow: { display: 'flex', alignItems: 'center', gap: '8px' },
   perspectiveLabel: { fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' },
   perspectiveSelect: { padding: '5px 10px', borderRadius: '6px', border: '1px solid #d0d0d0', fontSize: '13px', background: '#fafafa', cursor: 'pointer' },
