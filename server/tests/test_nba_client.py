@@ -74,7 +74,8 @@ def test_nba_game_list_pairs_home_and_away_and_filters_unfinished():
 
 
 def test_play_by_play_prefers_nba_api_for_cached_game():
-    with patch.object(nc, "_build_game", return_value=({"gameId": "0022500001"}, "finished")), \
+    with patch.object(nc, "_read_archived_play_by_play", return_value=None), \
+         patch.object(nc, "_build_game", return_value=({"gameId": "0022500001"}, "finished")), \
          patch.object(nc, "_build_bbr_game") as fallback:
         assert nc._fetch_play_by_play("0022500001") == {"gameId": "0022500001"}
     fallback.assert_not_called()

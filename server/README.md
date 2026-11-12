@@ -30,8 +30,9 @@ Server starts on http://localhost:5001.
 
 ## Notes
 
-- `2025-26` is available in the season selector. Uncached game lists come from `nba_api.stats.endpoints.LeagueGameFinder`; plays and box scores use `nba_api.live.nba.endpoints` first, with the existing Basketball-Reference fallback on NBA failures.
-- To cache the 2025–26 game lists, run `python3 -m server.seed_cache --season 2025-26` from the project root. This requires access to NBA endpoints; no third-party archive is bundled for that season.
+- `2025-26` includes downloaded lists and plays for all 1,230 regular-season and 85 playoff games. Historical plays load from `cache/pbp_2025-26.sqlite3` without a network request, and win probability is calculated locally.
+- To repeat the season download, install the download-only dependency `pyarrow`, then run `python3 -m server.download_season --season 2025-26`. Flask/Vercel do not need pyarrow. See [cache/README.md](cache/README.md) for sources and limitations.
+- Live/uncached games continue to use `nba_api`, with the existing Basketball-Reference fallback. The older `server.seed_cache` script fetches game lists directly through `nba_api`.
 - nba_api responses are cached in memory for the process lifetime. Restart to clear.
 - nba_api rate-limits requests. If you get 503 errors, wait a few seconds and retry.
 - stats.nba.com may block requests from certain networks (e.g. university/corporate IP blocks). Use a residential or VPN connection if requests time out.

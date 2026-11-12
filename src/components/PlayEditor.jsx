@@ -993,6 +993,9 @@ export default function PlayEditor({ season, seasonType, seasonControls }) {
       <div className="scenario-note">
         What-if results estimate changes to this game. Later events stay as
         recorded unless you edit them.
+        {game?.dataSource && (
+          <p>Downloaded play archive · Historical betting spreads are unavailable, so the model uses a neutral spread.</p>
+        )}
       </div>
     </div>
   );
@@ -1077,6 +1080,7 @@ export default function PlayEditor({ season, seasonType, seasonControls }) {
                   className={`studio-status-dot ${game.status === 'live' ? 'is-live' : ''}`}
                 />
                 {game.status === 'live' ? 'Live game' : 'Final score'}
+                {game.dataSource && <span> · Downloaded plays</span>}
                 {liveError && <span> · Updates delayed</span>}
                 <span>
                   {' '}

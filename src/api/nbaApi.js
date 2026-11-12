@@ -13,13 +13,24 @@ async function withRetry(fn, maxAttempts = 3) {
   throw lastErr;
 }
 
-async function apiFetch(path) {
-  const res = await fetch(path);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+async function apiFetch(path, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(path, { signal: controller.signal });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return await res.json();
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('The data request timed out. Please try again.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return res.json();
 }
 
 export function fetchSeasons() {
@@ -32,7 +43,7 @@ export function fetchGames(season, seasonType) {
   const params = new URLSearchParams({ season, season_type: seasonType });
   const path = `/api/games?${params}`;
   if (!pendingGameLists.has(path)) {
-    pendingGameLists.set(path, apiFetch(path).finally(() => pendingGameLists.delete(path)));
+    pendingGameLists.set(path, apiFetch(path, 20000).finally(() => pendingGameLists.delete(path)));
   }
   return pendingGameLists.get(path);
 }

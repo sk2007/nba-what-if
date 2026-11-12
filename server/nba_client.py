@@ -2,6 +2,9 @@ import json
 from pathlib import Path
 import re
 import requests
+import sqlite3
+import zlib
+from contextlib import closing
 from html import unescape
 from html.parser import HTMLParser
 
@@ -155,7 +158,7 @@ def get_play_by_play(game_id, live=False):
     When live=True, bypass the in-memory cache (always re-fetch).
     """
     if live:
-        return _fetch_play_by_play(game_id)
+        return _fetch_play_by_play(game_id, use_archive=False)
     key = f"pbp:{game_id}"
     return _cached(key, lambda: _fetch_play_by_play(game_id))
 
@@ -291,7 +294,30 @@ def _build_game(game_id):
     return game, status
 
 
-def _fetch_play_by_play(game_id):
+def _read_archived_play_by_play(game_id):
+    """Read one compressed game without loading the entire season into memory."""
+    if not re.fullmatch(r"00[24]\d{7}", game_id):
+        return None
+    year = 2000 + int(game_id[3:5])
+    season = f"{year}-{str(year + 1)[-2:]}"
+    path = _CACHE_DIR / f"pbp_{season}.sqlite3"
+    if not path.exists():
+        return None
+    with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as connection:
+        row = connection.execute("SELECT payload FROM games WHERE game_id = ?", (game_id,)).fetchone()
+    if row is None:
+        return None
+    game = json.loads(zlib.decompress(row[0]))
+    from server.wp_mlp import compute_wp_curve
+    game["wpCurve"] = compute_wp_curve(game["plays"], game["teamA"], line=game.get("bettingLine", 0))
+    return game
+
+
+def _fetch_play_by_play(game_id, use_archive=True):
+    if use_archive:
+        archived = _read_archived_play_by_play(game_id)
+        if archived is not None:
+            return archived
     try:
         game, _ = _build_game(game_id)
         return game
