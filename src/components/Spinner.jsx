@@ -52,20 +52,20 @@ const s = {
   shadow: {
     width: '28px',
     height: '7px',
-    background: '#1a1a1a',
+    background: 'var(--gold)',
     borderRadius: '50%',
     animation: 'shadow-pulse 0.7s ease infinite',
   },
   message: {
     fontSize: '14px',
     fontWeight: '600',
-    color: '#333',
+    color: 'var(--text-primary)',
     margin: '0 0 4px',
     textAlign: 'center',
   },
   hint: {
     fontSize: '12px',
-    color: '#aaa',
+    color: 'var(--text-muted)',
     margin: 0,
     textAlign: 'center',
   },

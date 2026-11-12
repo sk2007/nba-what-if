@@ -8,7 +8,7 @@ import { fetchPlayByPlay } from '../api/nbaApi';
 import GameSelector from './GameSelector';
 
 const REGULATION_SECONDS = 2880;
-const COLORS = ['#2563eb', '#dc2626'];
+const COLORS = ['var(--electric-blue)', 'var(--gold)'];
 
 function buildPeriodBoundaries(maxQuarter) {
   const b = [
@@ -66,10 +66,10 @@ function GameSlot({ index, season, seasonType, game, gameId, onGameChange, loadi
 
 const slotStyles = {
   wrapper: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '10px 0' },
-  badge: { fontSize: '11px', fontWeight: '700', color: '#fff', borderRadius: '4px', padding: '3px 8px', flexShrink: 0 },
-  status: { fontSize: '12px', color: '#888' },
-  error: { fontSize: '12px', color: '#dc2626' },
-  score: { fontSize: '13px', color: '#555' },
+  badge: { fontSize: '11px', fontWeight: '700', color: 'var(--on-accent)', borderRadius: '4px', padding: '3px 8px', flexShrink: 0 },
+  status: { fontSize: '12px', color: 'var(--text-secondary)' },
+  error: { fontSize: '12px', color: 'var(--error)' },
+  score: { fontSize: '13px', color: 'var(--text-secondary)' },
 };
 
 export default function GameComparison({ season, seasonType }) {
@@ -184,7 +184,7 @@ export default function GameComparison({ season, seasonType }) {
           </div>
           <ResponsiveContainer width="100%" height={320}>
             <LineChart data={merged} margin={{ top: 8, right: 16, left: 0, bottom: 24 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
               <XAxis
                 dataKey="gameSeconds"
                 type="number"
@@ -225,12 +225,12 @@ export default function GameComparison({ season, seasonType }) {
                 <ReferenceLine
                   key={b.seconds}
                   x={b.seconds}
-                  stroke="#ccc"
+                  stroke="var(--line)"
                   strokeDasharray="4 2"
-                  label={{ value: b.label, position: 'top', fontSize: 10, fill: '#999' }}
+                  label={{ value: b.label, position: 'top', fontSize: 10, fill: 'var(--text-secondary)' }}
                 />
               ))}
-              <ReferenceLine y={50} stroke="#ddd" strokeDasharray="4 2" />
+              <ReferenceLine y={50} stroke="var(--line)" strokeDasharray="4 2" />
               <Line type="monotone" dataKey="wpA" stroke={COLORS[0]} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls />
               <Line type="monotone" dataKey="wpB" stroke={COLORS[1]} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls strokeDasharray="6 3" />
             </LineChart>
@@ -243,16 +243,16 @@ export default function GameComparison({ season, seasonType }) {
 }
 
 const styles = {
-  slots: { display: 'flex', flexDirection: 'column', gap: '0', background: '#fff', borderRadius: '8px', padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '20px' },
-  slotDivider: { height: '1px', background: '#f0f0f0', margin: '4px 0' },
-  placeholder: { color: '#999', fontSize: '14px', textAlign: 'center', padding: '40px 0' },
-  chartPanel: { background: '#fff', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
-  chartTitle: { fontSize: '15px', fontWeight: '700', color: '#1a1a1a', marginBottom: '8px' },
+  slots: { display: 'flex', flexDirection: 'column', gap: '0', background: 'var(--surface)', borderRadius: '8px', padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '20px' },
+  slotDivider: { height: '1px', background: 'var(--line)', margin: '4px 0' },
+  placeholder: { color: 'var(--text-secondary)', fontSize: '14px', textAlign: 'center', padding: '40px 0' },
+  chartPanel: { background: 'var(--surface)', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
+  chartTitle: { fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '8px' },
   summaryRow: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' },
-  summaryPill: { padding: '3px 8px', borderRadius: '999px', background: '#eff6ff', color: '#2563eb', fontSize: '11px', fontWeight: '700' },
-  legend: { display: 'flex', alignItems: 'center', fontSize: '13px', color: '#444', marginBottom: '12px' },
+  summaryPill: { padding: '3px 8px', borderRadius: '999px', background: 'var(--blue-soft)', color: 'var(--electric-blue)', fontSize: '11px', fontWeight: '700' },
+  legend: { display: 'flex', alignItems: 'center', fontSize: '13px', color: 'var(--text-primary)', marginBottom: '12px' },
   legendDot: { display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', marginRight: '6px' },
-  tooltip: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', lineHeight: '1.7' },
+  tooltip: { background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', lineHeight: '1.7' },
   tooltipTime: { fontWeight: 600, marginBottom: '2px' },
-  chartNote: { fontSize: '11px', color: '#bbb', marginTop: '8px' },
+  chartNote: { fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' },
 };

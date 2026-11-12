@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useEffectEvent, useId, useMemo, useState } from 'react';
 import { fetchGames } from '../api/nbaApi';
 
 function teamMatches(teamName, term) {
@@ -8,110 +8,236 @@ function teamMatches(teamName, term) {
   return t.includes(q) || t.split(' ').some((w) => w.startsWith(q));
 }
 
-export default function GameSelector({ season, seasonType, gameId, onGameChange }) {
-  const inputId = useId();
-  const [games, setGames] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [team1, setTeam1] = useState('');
-  const [team2, setTeam2] = useState('');
-
-  useEffect(() => {
-    if (!season || !seasonType) return;
-    setLoading(true);
-    setError(null);
-    setTeam1('');
-    setTeam2('');
-    fetchGames(season, seasonType)
-      .then((data) => {
-        setGames(data.games);
-        if (data.games.length > 0 && !gameId) {
-          onGameChange(data.games[0].gameId);
-        }
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(e.message);
-        setLoading(false);
-      });
-  }, [season, seasonType]);
-
-  const filtered = games.filter((g) => {
-    const t1A = teamMatches(g.teamA, team1), t1B = teamMatches(g.teamB, team1);
-    const t2A = teamMatches(g.teamA, team2), t2B = teamMatches(g.teamB, team2);
-    return (t1A && t2B) || (t1B && t2A);
-  });
-
-  useEffect(() => {
-    if (!filtered.length) return;
-    if (!filtered.find((g) => g.gameId === gameId)) {
-      onGameChange(filtered[0].gameId);
-    }
-  }, [team1, team2]);
-
-  if (error) return <p style={{ color: '#dc2626', fontSize: 13 }}>Failed to load games: {error}</p>;
-
-  const hasFilter = team1.trim() || team2.trim();
-  const matchLabel = hasFilter
-    ? filtered.length > 0 ? `${filtered.length} game${filtered.length > 1 ? 's' : ''}` : 'no matches'
-    : '';
-
+export default function GameSelector({
+  season,
+  seasonType,
+  gameId,
+  onGameChange
+}) {
   return (
-    <div className="game-selector" style={styles.wrapper}>
-      <div className="game-selector__group" style={styles.group}>
-        <label style={styles.label} htmlFor={`${inputId}-team-1`}>Team 1</label>
-        <input
-          id={`${inputId}-team-1`}
-          className="game-selector__input"
-          type="text"
-          placeholder="e.g. Thunder"
-          value={team1}
-          onChange={(e) => setTeam1(e.target.value)}
-          style={styles.input}
-          disabled={loading || games.length === 0}
-        />
-      </div>
-      <div className="game-selector__vs" style={styles.vsLabel}>vs</div>
-      <div className="game-selector__group" style={styles.group}>
-        <label style={styles.label} htmlFor={`${inputId}-team-2`}>Team 2</label>
-        <input
-          id={`${inputId}-team-2`}
-          className="game-selector__input"
-          type="text"
-          placeholder="e.g. Pacers"
-          value={team2}
-          onChange={(e) => setTeam2(e.target.value)}
-          style={styles.input}
-          disabled={loading || games.length === 0}
-        />
-      </div>
-      <div className="game-selector__group" style={styles.group}>
-        <label style={styles.label} htmlFor={`${inputId}-game`}>Game{matchLabel ? ` — ${matchLabel}` : ''}</label>
-        <select
-          id={`${inputId}-game`}
-          className="game-selector__select app-select"
-          value={gameId || ''}
-          onChange={(e) => onGameChange(e.target.value)}
-          style={styles.select}
-          disabled={loading || filtered.length === 0}
-        >
-          {loading && <option>Loading games…</option>}
-          {filtered.map((g) => (
-            <option key={g.gameId} value={g.gameId}>
-              {g.teamA} vs {g.teamB} — {g.date} ({g.finalScoreA}–{g.finalScoreB})
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
+    <SeasonGames
+      key={`${season}:${seasonType}`}
+      {...{ season, seasonType, gameId, onGameChange }}
+    />
   );
 }
 
-const styles = {
-  wrapper: { display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' },
-  group: { display: 'flex', flexDirection: 'column', gap: '4px' },
-  label: { fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  input: { padding: '7px 10px', borderRadius: '6px', border: '1px solid #d0d0d0', fontSize: '13px', background: '#fafafa', width: '150px', outline: 'none' },
-  select: { padding: '7px 10px', borderRadius: '6px', border: '1px solid #d0d0d0', fontSize: '13px', cursor: 'pointer', background: '#fafafa', minWidth: '320px' },
-  vsLabel: { fontSize: '13px', color: '#999', paddingBottom: '8px' },
-};
+function SeasonGames({ season, seasonType, gameId, onGameChange }) {
+  const inputId = useId();
+  const [games, setGames] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [team1, setTeam1] = useState('');
+  const [team2, setTeam2] = useState('');
+  const [date, setDate] = useState('');
+  const [visibleCount, setVisibleCount] = useState(60);
+  const [reload, setReload] = useState(0);
+  const selectGame = useEffectEvent(onGameChange);
+
+  useEffect(() => {
+    if (!season || !seasonType) return;
+    let active = true;
+    fetchGames(season, seasonType)
+      .then((data) => {
+        if (!active) return;
+        setGames(data.games ?? []);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (!active) return;
+        setError(e.message);
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [season, seasonType, reload]);
+
+  const filtered = useMemo(
+    () =>
+      games.filter((g) => {
+        const t1A = teamMatches(g.teamA, team1),
+          t1B = teamMatches(g.teamB, team1);
+        const t2A = teamMatches(g.teamA, team2),
+          t2B = teamMatches(g.teamB, team2);
+        return ((t1A && t2B) || (t1B && t2A)) && (!date || g.date === date);
+      }),
+    [games, team1, team2, date]
+  );
+
+  useEffect(() => {
+    if (!games.length) return;
+    if (!games.some((game) => game.gameId === gameId))
+      selectGame(games[0].gameId);
+  }, [games, gameId]);
+
+  function refreshGames() {
+    setLoading(true);
+    setError(null);
+    setGames([]);
+    setReload((value) => value + 1);
+  }
+
+  const hasFilter = team1.trim() || team2.trim() || date;
+  const matchLabel = hasFilter
+    ? filtered.length > 0
+      ? `${filtered.length} game${filtered.length > 1 ? 's' : ''}`
+      : 'no matches'
+    : `${games.length} game${games.length === 1 ? '' : 's'}`;
+
+  return (
+    <div className="game-browser">
+      <div className="game-browser-heading">
+        <div>
+          <p className="studio-eyebrow">Game library</p>
+          <h2>Find your game</h2>
+        </div>
+        <button
+          type="button"
+          className="studio-icon-button"
+          aria-label={error ? 'Retry loading games' : 'Refresh games'}
+          disabled={loading}
+          onClick={refreshGames}
+        >
+          ↻
+        </button>
+      </div>
+      <label className="studio-field" htmlFor={`${inputId}-team-1`}>
+        Team or matchup
+        <input
+          id={`${inputId}-team-1`}
+          type="search"
+          placeholder="Search a team…"
+          value={team1}
+          onChange={(e) => {
+            setTeam1(e.target.value);
+            setVisibleCount(60);
+          }}
+          disabled={loading || games.length === 0}
+        />
+      </label>
+      <details className="game-browser-filters">
+        <summary>Matchup filters{team2 || date ? ' · Active' : ''}</summary>
+        <label className="studio-field" htmlFor={`${inputId}-team-2`}>
+          Opponent
+          <input
+            id={`${inputId}-team-2`}
+            type="search"
+            placeholder="Any opponent"
+            value={team2}
+            onChange={(e) => {
+              setTeam2(e.target.value);
+              setVisibleCount(60);
+            }}
+            disabled={loading || games.length === 0}
+          />
+        </label>
+        <label className="studio-field" htmlFor={`${inputId}-date`}>
+          Game date
+          <input
+            id={`${inputId}-date`}
+            type="date"
+            value={date}
+            onChange={(e) => {
+              setDate(e.target.value);
+              setVisibleCount(60);
+            }}
+          />
+        </label>
+      </details>
+      <div className="game-browser-count" role="status">
+        {loading
+          ? `Loading ${season} games…`
+          : error
+            ? 'Games unavailable'
+            : `${matchLabel} · ${season}`}
+      </div>
+      {error && (
+        <div className="studio-empty studio-error" role="alert">
+          <strong>We couldn’t load this season.</strong>
+          <p>
+            NBA data is temporarily unavailable. Your season selection is saved.
+          </p>
+          <button className="studio-button" onClick={refreshGames}>
+            Try again
+          </button>
+          <details>
+            <summary>Error details</summary>
+            <p>{error}</p>
+          </details>
+        </div>
+      )}
+      {loading && (
+        <div className="game-browser-skeleton" aria-hidden="true">
+          {[1, 2, 3, 4].map((n) => (
+            <div key={n}>
+              <span />
+              <span />
+            </div>
+          ))}
+        </div>
+      )}
+      {!loading && !error && (
+        <div className="game-browser-list" aria-label="Available games">
+          {filtered.slice(0, visibleCount).map((g) => (
+            <button
+              key={g.gameId}
+              className="game-browser-item"
+              aria-pressed={gameId === g.gameId}
+              onClick={() => onGameChange(g.gameId)}
+            >
+              <span className="game-browser-date">
+                {new Date(`${g.date}T12:00:00`).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+                <span>Final</span>
+              </span>
+              <span className="game-browser-team">
+                <span>{g.teamB}</span>
+                <b>{g.finalScoreB}</b>
+              </span>
+              <span className="game-browser-team">
+                <span>{g.teamA}</span>
+                <b>{g.finalScoreA}</b>
+              </span>
+            </button>
+          ))}
+          {filtered.length > visibleCount && (
+            <button
+              className="studio-button"
+              onClick={() => setVisibleCount((count) => count + 60)}
+            >
+              Show more games ({filtered.length - visibleCount} remaining)
+            </button>
+          )}
+          {filtered.length === 0 && (
+            <div className="studio-empty">
+              <strong>
+                {hasFilter ? 'No matching games' : 'No completed games yet'}
+              </strong>
+              <p>
+                {hasFilter
+                  ? 'Try another team or clear your filters.'
+                  : 'Completed games will appear here when NBA data is available.'}
+              </p>
+              {hasFilter && (
+                <button
+                  className="studio-button"
+                  onClick={() => {
+                    setTeam1('');
+                    setTeam2('');
+                    setDate('');
+                  }}
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

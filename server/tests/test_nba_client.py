@@ -43,3 +43,44 @@ def test_build_game_reports_finished_status():
          patch("server.betting_lines.get_pregame_line", return_value=0):
         _, status = nc._build_game("0022200001")
     assert status == "finished"
+
+
+def test_nba_game_list_pairs_home_and_away_and_filters_unfinished():
+    def row(game_id, team, matchup, points, outcome="W"):
+        return {"GAME_ID": game_id, "TEAM_NAME": team, "MATCHUP": matchup,
+                "PTS": points, "WL": outcome, "GAME_DATE": "2025-10-21"}
+
+    rows = [
+        row("0022500001", "Houston Rockets", "HOU @ OKC", 124, "L"),
+        row("0022500001", "Oklahoma City Thunder", "OKC vs. HOU", 125),
+        row("0022500002", "Los Angeles Lakers", "LAL vs. GSW", None, None),
+        row("0022500003", "Boston Celtics", "BOS vs. NYK", 100),
+        row("0042500001", "Boston Celtics", "BOS vs. NYK", 100),
+    ]
+    with patch("nba_api.stats.endpoints.leaguegamefinder.LeagueGameFinder") as endpoint:
+        endpoint.return_value.get_normalized_dict.return_value = {
+            "LeagueGameFinderResults": rows,
+        }
+        games = nc._fetch_nba_games("2025-26", "Regular Season")
+    endpoint.assert_called_once_with(
+        league_id_nullable="00", season_nullable="2025-26",
+        season_type_nullable="Regular Season", timeout=15,
+    )
+    assert games == [{
+        "gameId": "0022500001", "teamA": "Oklahoma City Thunder",
+        "teamB": "Houston Rockets", "date": "2025-10-21",
+        "finalScoreA": 125, "finalScoreB": 124,
+    }]
+
+
+def test_play_by_play_prefers_nba_api_for_cached_game():
+    with patch.object(nc, "_build_game", return_value=({"gameId": "0022500001"}, "finished")), \
+         patch.object(nc, "_build_bbr_game") as fallback:
+        assert nc._fetch_play_by_play("0022500001") == {"gameId": "0022500001"}
+    fallback.assert_not_called()
+
+
+def test_play_by_play_keeps_existing_fallback_on_nba_failure():
+    with patch.object(nc, "_build_game", side_effect=RuntimeError("NBA unavailable")), \
+         patch.object(nc, "_build_bbr_game", return_value={"gameId": "0022400001"}):
+        assert nc._fetch_play_by_play("0022400001") == {"gameId": "0022400001"}

@@ -26,9 +26,15 @@ export function fetchSeasons() {
   return apiFetch('/api/seasons');
 }
 
+const pendingGameLists = new Map();
+
 export function fetchGames(season, seasonType) {
   const params = new URLSearchParams({ season, season_type: seasonType });
-  return apiFetch(`/api/games?${params}`);
+  const path = `/api/games?${params}`;
+  if (!pendingGameLists.has(path)) {
+    pendingGameLists.set(path, apiFetch(path).finally(() => pendingGameLists.delete(path)));
+  }
+  return pendingGameLists.get(path);
 }
 
 export function fetchPlayByPlay(gameId) {

@@ -23,7 +23,7 @@ const styles = {
   nav: {
     display: 'flex',
     gap: '4px',
-    borderBottom: '2px solid #e0e0e0',
+    borderBottom: '2px solid var(--line)',
     marginBottom: '24px',
   },
   tab: {
@@ -33,13 +33,13 @@ const styles = {
     cursor: 'pointer',
     fontSize: '15px',
     fontWeight: '500',
-    color: '#666',
+    color: 'var(--text-secondary)',
     borderBottom: '2px solid transparent',
     marginBottom: '-2px',
     transition: 'color 0.15s',
   },
   activeTab: {
-    color: '#1a1a1a',
-    borderBottom: '2px solid #1a1a1a',
+    color: 'var(--text-primary)',
+    borderBottom: '2px solid var(--text-primary)',
   },
 };

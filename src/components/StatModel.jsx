@@ -30,7 +30,7 @@ export default function StatModel({ season, seasonType }) {
   }
 
   const winRate = result?.winRate ?? null;
-  const probColor = winRate === null ? '#999' : winRate >= 60 ? '#16a34a' : winRate <= 40 ? '#dc2626' : '#2563eb';
+  const probColor = winRate === null ? 'var(--text-secondary)' : winRate >= 60 ? 'var(--success)' : winRate <= 40 ? 'var(--error)' : 'var(--electric-blue)';
   const displayProb = winRate !== null ? `${winRate}%` : '—';
 
   return (
@@ -77,18 +77,18 @@ export default function StatModel({ season, seasonType }) {
 }
 
 const styles = {
-  panel: { display: 'flex', gap: '32px', background: '#fff', borderRadius: '8px', padding: '28px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
+  panel: { display: 'flex', gap: '32px', background: 'var(--surface)', borderRadius: '8px', padding: '28px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
   slidersSection: { flex: 1 },
-  sectionTitle: { fontSize: '15px', fontWeight: '600', marginBottom: '20px', color: '#1a1a1a' },
+  sectionTitle: { fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: '600', marginBottom: '20px', color: 'var(--text-primary)' },
   sliderRow: { marginBottom: '20px' },
   sliderLabelRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '6px' },
-  sliderLabel: { fontSize: '14px', color: '#1a1a1a' },
-  sliderValue: { fontSize: '14px', fontWeight: '600', color: '#2563eb' },
-  slider: { width: '100%', cursor: 'pointer', accentColor: '#2563eb' },
-  sliderRange: { display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#999', marginTop: '2px' },
-  resultSection: { width: '200px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #f0f0f0', paddingLeft: '32px' },
-  resultLabel: { fontSize: '13px', color: '#666', textAlign: 'center', marginBottom: '12px' },
+  sliderLabel: { fontSize: '14px', color: 'var(--text-primary)' },
+  sliderValue: { fontSize: '14px', fontWeight: '600', color: 'var(--electric-blue)' },
+  slider: { width: '100%', cursor: 'pointer', accentColor: 'var(--electric-blue)' },
+  sliderRange: { display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' },
+  resultSection: { width: '200px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--line)', paddingLeft: '32px' },
+  resultLabel: { fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', marginBottom: '12px' },
   resultProb: { fontSize: '64px', fontWeight: '700', lineHeight: 1, marginBottom: '8px', transition: 'color 0.2s, opacity 0.2s' },
-  resultSub: { fontSize: '12px', color: '#999', textAlign: 'center' },
-  errorText: { fontSize: '11px', color: '#dc2626', textAlign: 'center', marginBottom: '4px' },
+  resultSub: { fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center' },
+  errorText: { fontSize: '11px', color: 'var(--error)', textAlign: 'center', marginBottom: '4px' },
 };

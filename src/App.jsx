@@ -6,6 +6,7 @@ import GameComparison from './components/GameComparison';
 import ClutchIndex from './components/ClutchIndex';
 import { fetchGames } from './api/nbaApi';
 import './App.css';
+import './Studio.css';
 
 const TABS = ['Play Editor', 'Game Comparison', 'Clutch Index', 'Kalshi Markets'];
 const TAB_COPY = {
@@ -25,12 +26,12 @@ const lockStyles = {
     gap: '10px',
     padding: '18px',
     borderRadius: '10px',
-    background: '#fff',
+    background: 'var(--surface)',
   },
   label: {
     fontSize: '11px',
     fontWeight: '600',
-    color: '#888',
+    color: 'var(--text-secondary)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
@@ -44,22 +45,22 @@ const lockStyles = {
     minWidth: 0,
     padding: '8px 10px',
     borderRadius: '6px',
-    border: '1px solid #d0d0d0',
+    border: '1px solid var(--line)',
     fontSize: '13px',
-    background: '#fafafa',
+    background: 'var(--surface-soft)',
   },
   button: {
     padding: '8px 14px',
     borderRadius: '6px',
     border: 'none',
-    background: '#1a1a1a',
-    color: '#fff',
+    background: 'var(--gold)',
+    color: 'var(--on-accent)',
     fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',
   },
   error: {
-    color: '#dc2626',
+    color: 'var(--error)',
     fontSize: '13px',
     margin: 0,
   },
@@ -103,20 +104,22 @@ function KalshiPasswordGate({ onUnlock }) {
 }
 
 export default function App() {
-  const [season, setSeason] = useState('2024-25');
+  const [season, setSeason] = useState('2025-26');
   const [seasonType, setSeasonType] = useState('Regular Season');
   const [tab, setTab] = useState('Play Editor');
   const [kalshiUnlocked, setKalshiUnlocked] = useState(
     () => sessionStorage.getItem(KALSHI_UNLOCK_KEY) === 'true'
   );
   // Shared games list fetched once per season, used by both GameComparison and ClutchIndex
-  const [games, setGames] = useState([]);
+  const [gameList, setGameList] = useState(null);
+  const games = gameList?.season === season && gameList?.type === seasonType ? gameList.games : [];
 
   useEffect(() => {
-    setGames([]);
+    let active = true;
     fetchGames(season, seasonType)
-      .then((data) => setGames(data.games ?? []))
+      .then((data) => { if (active) setGameList({ season, type: seasonType, games: data.games ?? [] }); })
       .catch(() => {});
+    return () => { active = false; };
   }, [season, seasonType]);
 
   const seasonControls = (
@@ -131,20 +134,8 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div>
-          <p className="app-eyebrow">Bruin Sports Analytics</p>
-          <h1 className="app-title">NBA What If</h1>
-          <p className="app-subtitle">
-            Explore the moments, players, and markets that shape win probability across an NBA season.
-          </p>
-        </div>
-        <span className="app-header-badge">Spring 2026</span>
-        <div className="app-header-ball" aria-hidden="true">
-          <span className="app-header-ball__line app-header-ball__line--vertical" />
-          <span className="app-header-ball__line app-header-ball__line--horizontal" />
-          <span className="app-header-ball__curve app-header-ball__curve--left" />
-          <span className="app-header-ball__curve app-header-ball__curve--right" />
-        </div>
+        <a className="app-brand" href="#" onClick={(event) => { event.preventDefault(); setTab('Play Editor'); }} aria-label="NBA What If home"><img className="app-brand-mark" src="/brand/bsa-logo.jpeg" alt="" width="44" height="44" /><span><span className="app-eyebrow">Bruin Sports Analytics</span><h1 className="app-title">NBA What If<span className="app-title-dot">.</span></h1></span></a>
+        <span className="app-header-badge">Basketball, reconsidered.</span>
       </header>
 
       <nav className="tab-bar" aria-label="Analysis tools">
@@ -161,22 +152,21 @@ export default function App() {
         ))}
       </nav>
 
-      <section className="tool-intro">
+      <section className={`tool-intro${tab === 'Play Editor' ? ' tool-intro--editor' : ''}`}>
         <h2 className="tool-intro__title">{TAB_COPY[tab][0]}</h2>
         <p className="tool-intro__copy">{TAB_COPY[tab][1]}</p>
       </section>
 
       {tab === 'Play Editor' && (
         <>
-          {seasonControls}
-          <PlayEditor season={season} seasonType={seasonType} />
+          <PlayEditor key={`${season}:${seasonType}`} season={season} seasonType={seasonType} seasonControls={seasonControls} />
         </>
       )}
 
       {tab === 'Game Comparison' && (
         <>
           {seasonControls}
-          <GameComparison season={season} seasonType={seasonType} />
+          <GameComparison key={`${season}:${seasonType}`} season={season} seasonType={seasonType} />
         </>
       )}
 

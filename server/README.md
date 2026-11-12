@@ -30,6 +30,8 @@ Server starts on http://localhost:5001.
 
 ## Notes
 
+- `2025-26` is available in the season selector. Uncached game lists come from `nba_api.stats.endpoints.LeagueGameFinder`; plays and box scores use `nba_api.live.nba.endpoints` first, with the existing Basketball-Reference fallback on NBA failures.
+- To cache the 2025–26 game lists, run `python3 -m server.seed_cache --season 2025-26` from the project root. This requires access to NBA endpoints; no third-party archive is bundled for that season.
 - nba_api responses are cached in memory for the process lifetime. Restart to clear.
 - nba_api rate-limits requests. If you get 503 errors, wait a few seconds and retry.
 - stats.nba.com may block requests from certain networks (e.g. university/corporate IP blocks). Use a residential or VPN connection if requests time out.

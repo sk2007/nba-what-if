@@ -61,7 +61,7 @@ Flask API (server/app.py)
 │   │   ├── KalshiMarkets.jsx         # Prediction market viewer & bet advisor
 │   │   ├── GameComparison.jsx        # Side-by-side game momentum comparison
 │   │   ├── ClutchIndex.jsx           # Player clutch ranking with autocomplete
-│   │   ├── GameSelector.jsx          # Game picker dropdown
+│   │   ├── GameSelector.jsx          # Searchable game browser
 │   │   ├── SeasonSelector.jsx        # Season dropdown
 │   │   └── Spinner.jsx               # Bouncing basketball loading animation
 │   ├── utils/
@@ -115,9 +115,19 @@ Tab-based client-side routing in `App.jsx` — no React Router. Four tabs:
 - **Clutch Index** — per-player clutch performance ranking
 - **Kalshi Markets** — prediction market viewer (password-gated)
 
+### Courtside Studio
+
+The Play Editor uses a game library beside a shared Original/What If chart.
+Choose a game, click a key moment or use the keyboard-accessible timeline,
+then change Made/Missed in the scenario editor. The chart overlays the
+recomputed curve and the editor shows its change in percentage points.
+Play search, period filters, add/edit/delete/restore, and bulk deletion remain
+available. On narrow screens, the library and scenario editor open as native
+modal sheets with Escape dismissal and focus management.
+
 ### Styling
 
-CSS custom properties (design tokens) defined in `index.css`:
+The app uses the dark palette from bruinsportsanalytics.org, with locally hosted Montserrat for headings and Lato for content. CSS custom properties (design tokens) are defined in `index.css`:
 
 ```css
 --navy, --blue, --slate, --muted       /* color palette */
@@ -135,7 +145,7 @@ No CSS-in-JS library — components use inline styles referencing these tokens. 
 | `KalshiMarkets` | ~720 | Event browser, market cards, bet advisor overlay |
 | `ClutchIndex` | ~360 | Team autocomplete, player ranking table, WP-added bar chart |
 | `GameComparison` | ~280 | Dual game selector, overlaid WP curves |
-| `GameSelector` | ~100 | Season-aware game dropdown with team/date display |
+| `GameSelector` | ~100 | Season-aware game browser with team, opponent, and date filters |
 
 ### Dev Proxy
 
@@ -161,7 +171,7 @@ Vite proxies `/api/*` to `http://localhost:5001` during development, so the fron
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/seasons` | Available seasons (2014-25 → 2024-25) and season types |
+| GET | `/api/seasons` | Available seasons (2020-21 → 2025-26) and season types |
 | GET | `/api/games?season=&type=` | All games for a season |
 | GET | `/api/games/<id>/playbyplay` | Play-by-play with precomputed WP curve |
 | GET | `/api/games/<id>/boxscore` | Team stats (FG%, 3PT%, FT%, REB, TOV) |

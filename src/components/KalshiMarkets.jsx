@@ -5,72 +5,72 @@ import { computeEdge, computeKelly, computePortfolioKelly, getRecommendation } f
 const styles = {
   container: { padding: '0 0 40px' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginTop: '20px' },
-  card: { border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
-  cardTitle: { fontSize: '14px', fontWeight: '700', color: '#1a1a1a', marginBottom: '4px' },
-  cardSub: { fontSize: '12px', color: '#888', marginBottom: '14px' },
-  marketRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' },
-  teamLabel: { fontSize: '13px', fontWeight: '600', color: '#333', flex: 1 },
-  barWrap: { flex: 2, margin: '0 12px', height: '8px', borderRadius: '4px', background: '#f0f0f0', overflow: 'hidden' },
+  card: { border: '1px solid var(--line)', borderRadius: '10px', padding: '18px', background: 'var(--surface)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
+  cardTitle: { fontFamily: 'var(--font-heading)', fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' },
+  cardSub: { fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' },
+  marketRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line)' },
+  teamLabel: { fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', flex: 1 },
+  barWrap: { flex: 2, margin: '0 12px', height: '8px', borderRadius: '4px', background: 'var(--line)', overflow: 'hidden' },
   pctLabel: { fontSize: '13px', fontWeight: '700', minWidth: '40px', textAlign: 'right' },
   statusBadge: { display: 'inline-block', fontSize: '10px', fontWeight: '700', padding: '2px 7px', borderRadius: '99px', marginBottom: '10px', letterSpacing: '0.04em' },
-  occurrenceDate: { fontSize: '11px', color: '#aaa', marginTop: '10px' },
-  loading: { color: '#999', fontSize: '13px', marginTop: '20px' },
-  error: { color: '#c0392b', fontSize: '13px', marginTop: '20px' },
-  sectionLabel: { fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '16px' },
-  progress: { color: '#999', fontSize: '12px', marginTop: '8px' },
-  divider: { margin: '14px 0 10px', borderTop: '1px dashed #e5e5e5' },
-  oddsLabel: { fontSize: '10px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' },
+  occurrenceDate: { fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px' },
+  loading: { color: 'var(--text-secondary)', fontSize: '13px', marginTop: '20px' },
+  error: { color: 'var(--error)', fontSize: '13px', marginTop: '20px' },
+  sectionLabel: { fontFamily: 'var(--font-heading)', fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '16px' },
+  progress: { color: 'var(--text-secondary)', fontSize: '12px', marginTop: '8px' },
+  divider: { margin: '14px 0 10px', borderTop: '1px dashed var(--line)' },
+  oddsLabel: { fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' },
   oddsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: '4px' },
   oddsCol: { display: 'flex', flexDirection: 'column', gap: '2px' },
-  oddsHeader: { fontSize: '10px', color: '#bbb', fontWeight: '600', textAlign: 'center', marginBottom: '2px' },
-  oddsTeam: { fontSize: '11px', color: '#555', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  oddsHeader: { fontSize: '10px', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center', marginBottom: '2px' },
+  oddsTeam: { fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   oddsValue: { fontSize: '13px', fontWeight: '700', textAlign: 'center' },
   oddsBookRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' },
-  oddsBookName: { fontSize: '10px', color: '#bbb', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  advisorDivider: { margin: '14px 0 10px', borderTop: '1px dashed #e5e5e5' },
-  advisorLabel: { fontSize: '10px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' },
+  oddsBookName: { fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  advisorDivider: { margin: '14px 0 10px', borderTop: '1px dashed var(--line)' },
+  advisorLabel: { fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' },
   recommendBadge: { display: 'inline-block', fontSize: '11px', fontWeight: '700', padding: '3px 9px', borderRadius: '99px', marginBottom: '8px', letterSpacing: '0.05em' },
-  edgeLine: { fontSize: '12px', color: '#555', marginBottom: '4px' },
-  kellyLine: { fontSize: '12px', color: '#333', fontWeight: '600', marginBottom: '4px' },
-  rationale: { fontSize: '11px', color: '#888', fontStyle: 'italic', marginTop: '4px' },
-  bankrollPanel: { background: '#f8f8f8', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '16px 20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' },
-  bankrollInput: { border: '1px solid #ccc', borderRadius: '6px', padding: '6px 10px', fontSize: '14px', width: '120px' },
-  modeToggle: { display: 'flex', gap: '0', borderRadius: '6px', overflow: 'hidden', border: '1px solid #ccc' },
-  modeBtn: { padding: '6px 14px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', border: 'none', background: '#fff', color: '#555' },
-  modeBtnActive: { padding: '6px 14px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', border: 'none', background: '#1a1a1a', color: '#fff' },
-  portfolioSummary: { fontSize: '12px', color: '#555', marginLeft: 'auto' },
-  bankrollPrompt: { fontSize: '11px', color: '#bbb', marginTop: '8px' },
-  viewPropsBtn: { marginTop: '14px', width: '100%', padding: '8px 0', fontSize: '12px', fontWeight: '600', color: '#2563eb', background: 'none', border: '1px solid #2563eb', borderRadius: '6px', cursor: 'pointer', letterSpacing: '0.03em' },
+  edgeLine: { fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' },
+  kellyLine: { fontSize: '12px', color: 'var(--text-primary)', fontWeight: '600', marginBottom: '4px' },
+  rationale: { fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: '4px' },
+  bankrollPanel: { background: 'var(--surface-soft)', border: '1px solid var(--line)', borderRadius: '10px', padding: '16px 20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' },
+  bankrollInput: { border: '1px solid var(--line)', borderRadius: '6px', padding: '6px 10px', fontSize: '14px', width: '120px' },
+  modeToggle: { display: 'flex', gap: '0', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--line)' },
+  modeBtn: { padding: '6px 14px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', border: 'none', background: 'var(--surface)', color: 'var(--text-secondary)' },
+  modeBtnActive: { padding: '6px 14px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', border: 'none', background: 'var(--gold)', color: 'var(--on-accent)' },
+  portfolioSummary: { fontSize: '12px', color: 'var(--text-secondary)', marginLeft: 'auto' },
+  bankrollPrompt: { fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' },
+  viewPropsBtn: { marginTop: '14px', width: '100%', padding: '8px 0', fontSize: '12px', fontWeight: '600', color: 'var(--electric-blue)', background: 'none', border: '1px solid var(--electric-blue)', borderRadius: '6px', cursor: 'pointer', letterSpacing: '0.03em' },
   backdrop: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  modal: { background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '640px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,0.18)', margin: '0 16px' },
-  modalHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 0', borderBottom: '1px solid #f0f0f0', paddingBottom: '14px' },
-  modalTitle: { fontSize: '15px', fontWeight: '700', color: '#1a1a1a' },
-  modalClose: { fontSize: '20px', color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1, padding: '0 4px' },
-  modalTabs: { display: 'flex', borderBottom: '1px solid #f0f0f0', padding: '0 20px' },
-  modalTab: { padding: '10px 14px', fontSize: '12px', fontWeight: '600', color: '#888', cursor: 'pointer', border: 'none', background: 'none', borderBottom: '2px solid transparent', marginBottom: '-1px' },
-  modalTabActive: { padding: '10px 14px', fontSize: '12px', fontWeight: '600', color: '#1a1a1a', cursor: 'pointer', border: 'none', background: 'none', borderBottom: '2px solid #1a1a1a', marginBottom: '-1px' },
+  modal: { background: 'var(--surface)', borderRadius: '12px', width: '100%', maxWidth: '640px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,0.18)', margin: '0 16px' },
+  modalHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 0', borderBottom: '1px solid var(--line)', paddingBottom: '14px' },
+  modalTitle: { fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' },
+  modalClose: { fontSize: '20px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1, padding: '0 4px' },
+  modalTabs: { display: 'flex', borderBottom: '1px solid var(--line)', padding: '0 20px' },
+  modalTab: { padding: '10px 14px', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', cursor: 'pointer', border: 'none', background: 'none', borderBottom: '2px solid transparent', marginBottom: '-1px' },
+  modalTabActive: { padding: '10px 14px', fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)', cursor: 'pointer', border: 'none', background: 'none', borderBottom: '2px solid var(--text-primary)', marginBottom: '-1px' },
   modalBody: { overflowY: 'auto', padding: '16px 20px', flex: 1 },
-  modalEmpty: { color: '#bbb', fontSize: '13px', textAlign: 'center', padding: '32px 0' },
-  propRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' },
-  propLabel: { fontSize: '13px', color: '#333', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '8px' },
-  playerHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '10px 0', cursor: 'pointer', border: 'none', borderBottom: '1px solid #f0f0f0', background: 'transparent', textAlign: 'left', userSelect: 'none' },
-  playerName: { fontSize: '13px', fontWeight: '700', color: '#1a1a1a' },
+  modalEmpty: { color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '32px 0' },
+  propRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line)' },
+  propLabel: { fontSize: '13px', color: 'var(--text-primary)', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '8px' },
+  playerHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '10px 0', cursor: 'pointer', border: 'none', borderBottom: '1px solid var(--line)', background: 'transparent', textAlign: 'left', userSelect: 'none' },
+  playerName: { fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' },
 };
 
 function statusStyle(status) {
-  if (status === 'active') return { background: '#e6f9ee', color: '#1a7a41' };
-  if (status === 'closed') return { background: '#f0f0f0', color: '#888' };
-  return { background: '#fff3e0', color: '#e67e22' };
+  if (status === 'active') return { background: 'var(--positive-soft)', color: 'var(--success)' };
+  if (status === 'closed') return { background: 'var(--line)', color: 'var(--text-secondary)' };
+  return { background: 'var(--gold-soft)', color: 'var(--warm-gold)' };
 }
 
 function pctColor(pct) {
-  if (pct >= 65) return '#1a7a41';
-  if (pct >= 45) return '#2563eb';
-  return '#c0392b';
+  if (pct >= 65) return 'var(--success)';
+  if (pct >= 45) return 'var(--electric-blue)';
+  return 'var(--error)';
 }
 
 function americanColor(val) {
-  return val < 0 ? '#1a7a41' : '#2563eb';
+  return val < 0 ? 'var(--success)' : 'var(--electric-blue)';
 }
 
 function formatAmerican(val) {
@@ -260,7 +260,7 @@ function PropsModal({ gameTitle, gameSuffix, onClose }) {
                   aria-expanded={isOpen}
                 >
                   <span style={styles.playerName}>{player}</span>
-                  <span style={{ fontSize: '11px', color: '#aaa' }}>{isOpen ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{isOpen ? '▼' : '▶'}</span>
                 </button>
                 {isOpen && lines.map(mk => {
                   const pct = Math.round((parseFloat(mk.yes_ask_dollars) + parseFloat(mk.yes_bid_dollars)) / 2 * 100);
@@ -289,8 +289,8 @@ function BankrollPanel({ bankroll, setBankroll, mode, setMode, portfolioSummary 
   return (
     <div className="mobile-stack surface-card" style={styles.bankrollPanel}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '13px', color: '#555', fontWeight: '600' }}>Bankroll</span>
-        <span style={{ fontSize: '13px', color: '#555' }}>$</span>
+        <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '600' }}>Bankroll</span>
+        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>$</span>
         <input
           style={styles.bankrollInput}
           type="number"
@@ -329,7 +329,7 @@ function AdvisorSection({ kalshiYesPct, kalshiYesTeam, oddsGame, bankroll, mode,
     return (
       <>
         <div style={styles.advisorDivider} />
-        <div style={{ ...styles.edgeLine, color: '#bbb' }}>Insufficient market data</div>
+        <div style={{ ...styles.edgeLine, color: 'var(--text-muted)' }}>Insufficient market data</div>
       </>
     );
   }
@@ -375,7 +375,7 @@ function AdvisorSection({ kalshiYesPct, kalshiYesTeam, oddsGame, bankroll, mode,
         </div>
       )}
       {hasBankroll && mode === 'single' && !kellySizing && (
-        <div style={{ ...styles.kellyLine, color: '#bbb' }}>No edge — skip this bet</div>
+        <div style={{ ...styles.kellyLine, color: 'var(--text-muted)' }}>No edge — skip this bet</div>
       )}
       {hasBankroll && mode === 'portfolio' && portfolioAllocation != null && (
         <div style={styles.kellyLine}>Portfolio allocation: ${portfolioAllocation}</div>

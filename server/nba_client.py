@@ -32,7 +32,7 @@ def _season_year(season):
 
 
 def get_available_seasons():
-    seasons = set()
+    seasons = {"2025-26"}
     for path in _CACHE_DIR.glob("games_*_Regular_Season.json"):
         name = path.stem
         prefix = "games_"
@@ -101,33 +101,42 @@ def _fetch_games(season, season_type):
     if cached_games is not None:
         return cached_games
 
-    year = _season_year(season)
-    url = f"https://data.nba.com/data/v2015/json/mobile_teams/nba/{year}/league/00_full_schedule.json"
-    r = requests.get(url, headers=_CDN_HEADERS, timeout=15)
-    r.raise_for_status()
-    data = r.json()
+    return _fetch_nba_games(season, season_type)
 
-    prefix = _SEASON_TYPE_PREFIX.get(season_type, "002")
+
+def _fetch_nba_games(season, season_type):
+    """Pair the home/away team rows returned by swar/nba_api."""
+    from nba_api.stats.endpoints import leaguegamefinder
+
+    result = leaguegamefinder.LeagueGameFinder(
+        league_id_nullable="00",
+        season_nullable=season,
+        season_type_nullable=season_type,
+        timeout=15,
+    ).get_normalized_dict()
+    prefix = _SEASON_TYPE_PREFIX[season_type]
+    paired = {}
+    for row in result["LeagueGameFinderResults"]:
+        game_id = row["GAME_ID"]
+        if not game_id.startswith(prefix) or row.get("WL") not in ("W", "L"):
+            continue
+        side = "home" if " vs. " in row["MATCHUP"] else "away"
+        paired.setdefault(game_id, {})[side] = row
+
     games = []
-    for month in data["lscd"]:
-        for g in month["mscd"]["g"]:
-            if not g["gid"].startswith(prefix):
-                continue
-            # Only include completed games (st="3" means final)
-            if str(g.get("st")) != "3":
-                continue
-            home = g["h"]
-            away = g["v"]
-            games.append({
-                "gameId": g["gid"],
-                "teamA": f"{home['tc']} {home['tn']}",
-                "teamB": f"{away['tc']} {away['tn']}",
-                "date": g["gdte"],
-                "finalScoreA": int(home["s"]) if home.get("s") else 0,
-                "finalScoreB": int(away["s"]) if away.get("s") else 0,
-            })
-
-    games.sort(key=lambda g: g["date"], reverse=True)
+    for game_id, sides in paired.items():
+        if "home" not in sides or "away" not in sides:
+            continue
+        home, away = sides["home"], sides["away"]
+        games.append({
+            "gameId": game_id,
+            "teamA": home["TEAM_NAME"],
+            "teamB": away["TEAM_NAME"],
+            "date": home["GAME_DATE"][:10],
+            "finalScoreA": int(home["PTS"]),
+            "finalScoreB": int(away["PTS"]),
+        })
+    games.sort(key=lambda g: (g["date"], g["gameId"]), reverse=True)
     return games
 
 
@@ -283,20 +292,11 @@ def _build_game(game_id):
 
 
 def _fetch_play_by_play(game_id):
-    # Archived games in the bundled cache are completed games. Prefer the
-    # Basketball-Reference page in that case so serverless deployments do not
-    # wait on NBA live endpoints that often return blocked or empty responses.
-    cached_game = _find_cached_game(game_id)
-    if cached_game is not None:
-        fallback = _build_bbr_game(game_id, cached_game)
-        if fallback is not None:
-            return fallback
-
     try:
         game, _ = _build_game(game_id)
         return game
     except Exception as nba_error:
-        fallback = _build_bbr_game(game_id, cached_game)
+        fallback = _build_bbr_game(game_id)
         if fallback is not None:
             return fallback
         raise RuntimeError(

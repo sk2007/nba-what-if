@@ -27,7 +27,7 @@ function Bar({ value, max, color }) {
 }
 
 const barStyles = {
-  track: { height: '6px', background: '#f0f0f0', borderRadius: '3px', flex: 1 },
+  track: { height: '6px', background: 'var(--line)', borderRadius: '3px', flex: 1 },
   fill: { height: '100%', borderRadius: '3px', transition: 'width 0.3s' },
 };
 
@@ -188,7 +188,7 @@ export default function ClutchIndex({ season, seasonType, games }) {
             </div>
             {sorted.map((p, i) => {
               const isPositive = p.wpAdded >= 0;
-              const color = isPositive ? '#16a34a' : '#dc2626';
+              const color = isPositive ? 'var(--success)' : 'var(--error)';
               return (
                 <div className="table-row-interactive" key={p.player} style={styles.tableRow}>
                   <span style={styles.rank}>{i + 1}</span>
@@ -203,11 +203,11 @@ export default function ClutchIndex({ season, seasonType, games }) {
                   <span style={{ width: 90, textAlign: 'right', fontWeight: '700', color, fontSize: '13px' }}>
                     {p.wpAdded > 0 ? '+' : ''}{p.wpAdded}%
                   </span>
-                  <span style={{ width: 90, textAlign: 'right', fontSize: '12px', color: p.avgWpAdded >= 0 ? '#16a34a' : '#dc2626' }}>
+                  <span style={{ width: 90, textAlign: 'right', fontSize: '12px', color: p.avgWpAdded >= 0 ? 'var(--success)' : 'var(--error)' }}>
                     {p.avgWpAdded > 0 ? '+' : ''}{p.avgWpAdded}%
                   </span>
-                  <span style={{ width: 60, textAlign: 'right', fontSize: '12px', color: '#666' }}>{p.plays}</span>
-                  <span style={{ width: 60, textAlign: 'right', fontSize: '12px', color: '#999' }}>{p.games}</span>
+                  <span style={{ width: 60, textAlign: 'right', fontSize: '12px', color: 'var(--text-secondary)' }}>{p.plays}</span>
+                  <span style={{ width: 60, textAlign: 'right', fontSize: '12px', color: 'var(--text-secondary)' }}>{p.games}</span>
                 </div>
               );
             })}
@@ -244,29 +244,29 @@ export default function ClutchIndex({ season, seasonType, games }) {
 const styles = {
   controlRow: { display: 'flex', alignItems: 'flex-end', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' },
   teamGroup: { display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative' },
-  label: { fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  label: { fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' },
   autocompleteWrapper: { position: 'relative' },
-  input: { padding: '7px 10px', borderRadius: '6px', border: '1px solid #d0d0d0', fontSize: '13px', background: '#fafafa', width: '260px', outline: 'none' },
-  suggestions: { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e0e0e0', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, marginTop: '2px' },
-  suggestion: { padding: '7px 12px', fontSize: '13px', cursor: 'pointer', color: '#1a1a1a', borderBottom: '1px solid #f5f5f5' },
-  suggestionActive: { background: '#eff6ff', color: '#1d4ed8' },
-  loadBtn: { padding: '7px 18px', borderRadius: '6px', border: 'none', background: '#1a1a1a', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer', alignSelf: 'flex-end' },
-  error: { color: '#dc2626', fontSize: '13px', margin: '8px 0' },
+  input: { padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '13px', background: 'var(--surface-soft)', width: '260px', outline: 'none' },
+  suggestions: { position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, marginTop: '2px' },
+  suggestion: { padding: '7px 12px', fontSize: '13px', cursor: 'pointer', color: 'var(--text-primary)', borderBottom: '1px solid var(--line)' },
+  suggestionActive: { background: 'var(--blue-soft)', color: 'var(--electric-blue)' },
+  loadBtn: { padding: '7px 18px', borderRadius: '6px', border: 'none', background: 'var(--gold)', color: 'var(--on-accent)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', alignSelf: 'flex-end' },
+  error: { color: 'var(--error)', fontSize: '13px', margin: '8px 0' },
   loadingBox: { textAlign: 'center', padding: '40px 0' },
-  loadingText: { color: '#555', fontSize: '14px', marginBottom: '6px' },
-  loadingHint: { color: '#aaa', fontSize: '12px' },
-  meta: { fontSize: '11px', color: '#999', marginBottom: '12px' },
+  loadingText: { color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '6px' },
+  loadingHint: { color: 'var(--text-muted)', fontSize: '12px' },
+  meta: { fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '12px' },
   sortRow: { display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' },
-  sortBtn: { padding: '4px 10px', borderRadius: '4px', border: '1px solid #e0e0e0', background: '#fafafa', fontSize: '12px', cursor: 'pointer', color: '#555' },
-  sortBtnActive: { background: '#1a1a1a', color: '#fff', border: '1px solid #1a1a1a' },
-  table: { background: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' },
-  tableHeader: { display: 'flex', gap: '8px', padding: '8px 16px', background: '#f5f5f5', fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em' },
-  tableRow: { display: 'flex', gap: '8px', alignItems: 'center', padding: '10px 16px', borderBottom: '1px solid #f5f5f5' },
-  rank: { width: 28, fontSize: '11px', fontWeight: '700', color: '#bbb' },
+  sortBtn: { padding: '4px 10px', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--surface-soft)', fontSize: '12px', cursor: 'pointer', color: 'var(--text-secondary)' },
+  sortBtnActive: { background: 'var(--gold)', color: 'var(--on-accent)', border: '1px solid var(--text-primary)' },
+  table: { background: 'var(--surface)', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' },
+  tableHeader: { display: 'flex', gap: '8px', padding: '8px 16px', background: 'var(--surface-soft)', fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' },
+  tableRow: { display: 'flex', gap: '8px', alignItems: 'center', padding: '10px 16px', borderBottom: '1px solid var(--line)' },
+  rank: { width: 28, fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' },
   playerCell: { flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', overflow: 'hidden' },
-  playerName: { fontSize: '13px', fontWeight: '600', color: '#1a1a1a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  emptyState: { maxWidth: '560px', marginTop: '12px', padding: '26px', borderRadius: '10px', background: '#fff', textAlign: 'center' },
-  emptyTitle: { display: 'block', color: '#334155', fontSize: '14px', marginBottom: '7px' },
-  hint: { color: '#94a3b8', fontSize: '13px', lineHeight: 1.55 },
-  empty: { color: '#aaa', fontSize: '13px', textAlign: 'center', padding: '24px 0' },
+  playerName: { fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  emptyState: { maxWidth: '560px', marginTop: '12px', padding: '26px', borderRadius: '10px', background: 'var(--surface)', textAlign: 'center' },
+  emptyTitle: { fontFamily: 'var(--font-heading)', display: 'block', color: 'var(--text-primary)', fontSize: '14px', marginBottom: '7px' },
+  hint: { color: 'var(--text-muted)', fontSize: '13px', lineHeight: 1.55 },
+  empty: { color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '24px 0' },
 };
