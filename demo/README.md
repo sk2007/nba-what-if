@@ -23,4 +23,4 @@ Or `npx hyperframes@0.9.37 render -o nba-what-if-demo.mp4`.
 - `index.html` holds the whole composition. Scene timing lives in each `<section data-start data-duration>` and the GSAP timeline at the bottom.
 - The chart paths in scenes 3 and 5 are baked from `/api/games/0022501142/playbyplay` and `/api/wp/recompute` (override: event 463 → Missed).
 - Screenshots in `assets/` were captured from the local app at 1600×900.
-- The soundtrack is `assets/audio/carry_me_home.mp3`, starting at 2:31.4 (`data-media-start` on `#music`) at 0.6 volume because the master is hot.
+- The soundtrack is "Pop Pop Music" by gr0za from Pixabay (track 596486, Pixabay Content License), at `assets/audio/pop-pop-music-gr0za.mp3`. It starts at 0:34.0 (`data-media-start` on `#music`) so the drop lands on the "Missed" click, at 0.75 volume because the master clips.

@@ -62,8 +62,10 @@
       #s1 .tag { margin-top: 18px; font-size: 36px; color: var(--ink-2); }
 
       /* S2 game */
-      #s2 .frame { left: 880px; top: 150px; width: 1500px; }
-      #s2 .stat { position: absolute; left: 120px; top: 560px; display: flex; gap: 56px; }
+      #s2 .caption { width: 600px; top: 210px; }
+      #s2 .frame { left: 760px; top: 236px; width: 1080px; height: 608px; }
+      #s2 .frame img { transform-origin: 78% 22%; }
+      #s2 .stat { position: absolute; left: 120px; top: 660px; width: 600px; display: grid; grid-template-columns: 140px 200px 180px; column-gap: 40px; padding-top: 36px; border-top: 1px solid var(--line); }
       .num { font-family: var(--font-display); font-weight: 800; font-size: 64px; letter-spacing: -0.03em; }
       .lbl { font-size: 28px; color: var(--muted); margin-top: 6px; letter-spacing: 0.04em; }
 
@@ -115,8 +117,8 @@
   <body>
     <div id="root" data-composition-id="main" data-start="0" data-duration="37" data-width="1920" data-height="1080">
       <div class="grid"></div>
-      <!-- Soundtrack: "Carry Me Home" (130 BPM). Starts at 2:31.4, on the beat after the break, so the song winds down under the outro. -->
-      <audio id="music" data-start="0" data-duration="37" data-media-start="151.4" data-volume="0.6" data-fade-in="0.3" data-fade-out="2.5" src="assets/audio/carry_me_home.mp3"></audio>
+      <!-- Soundtrack: "Pop Pop Music" by gr0za (Pixabay, track 596486). Starts at 0:34.0 so the drop at 0:52.45 lands on the "Missed" click (18.45s). -->
+      <audio id="music" data-start="0" data-duration="37" data-media-start="34.0" data-volume="0.75" data-fade-in="0.3" data-fade-out="2.5" src="assets/audio/pop-pop-music-gr0za.mp3"></audio>
 
       <!-- S1: intro -->
       <section id="s1" class="clip" data-start="0" data-duration="4" data-track-index="0">
@@ -137,10 +139,10 @@
         </div>
         <div class="stat">
           <div><div class="num">6</div><div class="lbl">SEASONS</div></div>
-          <div><div class="num">1,230</div><div class="lbl">GAMES / SEASON</div></div>
-          <div><div class="num">467</div><div class="lbl">PLAYS IN THIS ONE</div></div>
+          <div><div class="num">1,230</div><div class="lbl">GAMES A SEASON</div></div>
+          <div><div class="num">467</div><div class="lbl">PLAYS THIS GAME</div></div>
         </div>
-        <div class="frame" data-layout-allow-overflow><img src="assets/02-game.png" alt="" /></div>
+        <div class="frame"><img src="assets/02-game.png" alt="" /></div>
       </section>
 
       <!-- S3: full game win probability -->
@@ -256,8 +258,8 @@
       // S2 game
       tl.from("#s2 .caption > *", { y: 30, opacity: 0, duration: 0.6, stagger: 0.12, ease }, 4.1)
         .from("#s2 .stat > *", { y: 30, opacity: 0, duration: 0.5, stagger: 0.1, ease }, 4.6)
-        .from("#s2 .frame", { x: 300, opacity: 0, rotationY: -12, duration: 0.9, ease }, 4.2)
-        .to("#s2 .frame", { x: -60, scale: 1.08, transformOrigin: "30% 30%", duration: 3.5, ease: "sine.inOut" }, 5.1)
+        .from("#s2 .frame", { x: 120, opacity: 0, duration: 0.9, ease }, 4.2)
+        .to("#s2 .frame img", { scale: 1.3, duration: 3.4, ease: "sine.inOut" }, 5.1)
         .to("#s2 > *", { opacity: 0, duration: 0.4, ease: "power2.in" }, 8.55);
 
       // S3 full game curve
