@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: 'Montserrat'; src: url('assets/fonts/montserrat-variable.woff2') format('woff2'); font-weight: 600 800; }
+      @font-face { font-family: 'Lato'; src: url('assets/fonts/lato-regular.woff2') format('woff2'); font-weight: 400; }
+      @font-face { font-family: 'Lato'; src: url('assets/fonts/lato-bold.woff2') format('woff2'); font-weight: 700; }
+      :root {
+        --ground: #0b1f38;
+        --ground-2: #0c283b;
+        --surface: #102a49;
+        --ink: #f7fbff;
+        --ink-2: #b8c8d9;
+        --muted: #7f95aa;
+        --gold: #ffd100;
+        --blue: #4aa8ff;
+        --green: #40d39c;
+        --red: #ff6b72;
+        --line: rgba(151, 193, 226, 0.18);
+        --font-display: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+        --font-body: 'Lato', ui-sans-serif, system-ui, sans-serif;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--ground); }
+      #root {
+        position: relative; width: 100%; height: 100%; overflow: hidden;
+        font-family: var(--font-body); color: var(--ink);
+        background: radial-gradient(1200px 700px at 78% 18%, rgba(39,116,174,0.35), transparent 60%),
+                    radial-gradient(900px 600px at 10% 100%, rgba(255,209,0,0.06), transparent 60%),
+                    linear-gradient(160deg, var(--ground-2), var(--ground));
+      }
+      .clip { position: absolute; inset: 0; }
+      .grid {
+        position: absolute; inset: 0; opacity: 0.35;
+        background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+        background-size: 96px 96px;
+        mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+      }
+      .kicker { font-family: var(--font-display); font-weight: 700; font-size: 28px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); }
+      .headline { font-family: var(--font-display); font-weight: 800; font-size: 76px; letter-spacing: -0.03em; line-height: 1.02; }
+      .sub { font-size: 30px; color: var(--ink-2); line-height: 1.35; }
+      .caption { position: absolute; left: 120px; top: 96px; width: 760px; }
+      .caption .headline { margin-top: 18px; }
+      .caption .sub { margin-top: 22px; }
+      .frame {
+        position: absolute; border-radius: 22px; overflow: hidden;
+        border: 1px solid rgba(139,203,255,0.25);
+        box-shadow: 0 40px 120px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.3);
+        background: var(--surface);
+      }
+      .frame img { display: block; width: 100%; }
+
+      /* S1 intro */
+      #s1 .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      #s1 .logo { width: 150px; height: 150px; border-radius: 28px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+      #s1 .org { margin-top: 44px; }
+      #s1 .title { font-family: var(--font-display); font-weight: 800; font-size: 150px; letter-spacing: -0.045em; margin-top: 10px; }
+      #s1 .title .dot { color: var(--blue); }
+      #s1 .tag { margin-top: 18px; font-size: 36px; color: var(--ink-2); }
+
+      /* S2 game */
+      #s2 .frame { left: 880px; top: 150px; width: 1500px; }
+      #s2 .stat { position: absolute; left: 120px; top: 560px; display: flex; gap: 56px; }
+      .num { font-family: var(--font-display); font-weight: 800; font-size: 64px; letter-spacing: -0.03em; }
+      .lbl { font-size: 28px; color: var(--muted); margin-top: 6px; letter-spacing: 0.04em; }
+
+      /* S3 / S5 charts */
+      .chart { position: absolute; left: 140px; top: 380px; width: 1640px; height: 460px; overflow: visible; }
+      .chart .gl { stroke: var(--line); stroke-width: 1.5; }
+      .chart .half { stroke: rgba(184,200,217,0.45); stroke-dasharray: 6 8; stroke-width: 1.5; }
+      .chart .ax { fill: var(--ink-2); font-size: 28px; font-family: var(--font-body); }
+      .orig { fill: none; stroke: var(--blue); stroke-width: 4; stroke-linejoin: round; }
+      .wif { fill: none; stroke: var(--gold); stroke-width: 5; stroke-linejoin: round; }
+      .callout { position: absolute; padding: 18px 24px; border-radius: 16px; background: rgba(16,42,73,0.92); border: 1px solid rgba(139,203,255,0.3); box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
+      .callout .t { font-family: var(--font-display); font-weight: 700; font-size: 28px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--blue); }
+      .callout .b { font-family: var(--font-display); font-weight: 800; font-size: 40px; margin-top: 6px; }
+      .callout .s { font-size: 28px; color: var(--ink-2); margin-top: 4px; }
+      .legend { position: absolute; right: 140px; top: 300px; display: flex; gap: 40px; font-size: 28px; color: var(--ink-2); align-items: center; }
+      .legend i { display: inline-block; width: 44px; height: 5px; border-radius: 3px; vertical-align: middle; margin-right: 12px; }
+
+      /* S4 flip */
+      #s4 .panel { position: absolute; left: 1200px; top: 64px; width: 350px; height: 953px; }
+      #s4 .panel .frame { inset: 0; position: absolute; }
+      #s4 .panel img { position: absolute; left: 0; top: 0; width: 350px; }
+      #s4 .cursor { position: absolute; left: 0; top: 0; width: 44px; height: 44px; }
+      #s4 .ring { position: absolute; width: 90px; height: 90px; border-radius: 50%; border: 4px solid var(--gold); }
+      #s4 .meter { position: absolute; left: 120px; top: 560px; }
+      #s4 .meter .row { display: flex; align-items: baseline; gap: 28px; }
+      #s4 .big { font-family: var(--font-display); font-weight: 800; font-size: 190px; letter-spacing: -0.05em; line-height: 1; color: var(--gold); }
+      #s4 .from { font-family: var(--font-display); font-weight: 700; font-size: 72px; color: var(--muted); text-decoration: line-through; text-decoration-thickness: 5px; }
+      #s4 .pp { margin-top: 18px; display: inline-block; padding: 10px 22px; border-radius: 999px; background: rgba(64,211,156,0.14); color: var(--green); font-family: var(--font-display); font-weight: 800; font-size: 34px; }
+
+      /* S5 */
+      #s5 .final { position: absolute; right: 140px; top: 96px; text-align: right; }
+      #s5 .final .score { font-family: var(--font-display); font-weight: 800; font-size: 96px; letter-spacing: -0.04em; }
+      #s5 .final .score em { font-style: normal; color: var(--gold); }
+
+      /* S6 clutch */
+      #s6 .frame { left: 800px; top: 220px; width: 1000px; height: 600px; }
+      #s6 .frame img { position: absolute; width: 1000px; left: 0; top: -180px; }
+      #s6 .hl { position: absolute; left: 50px; width: 900px; height: 36px; border: 3px solid var(--gold); border-radius: 8px; box-shadow: 0 0 40px rgba(255,209,0,0.35); }
+
+      /* S7 outro */
+      #s7 .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      #s7 .logo { width: 110px; height: 110px; border-radius: 22px; }
+      #s7 .title { font-family: var(--font-display); font-weight: 800; font-size: 120px; letter-spacing: -0.045em; margin-top: 30px; }
+      #s7 .title .dot { color: var(--blue); }
+      #s7 .feat { margin-top: 26px; font-size: 30px; color: var(--ink-2); }
+      #s7 .url { margin-top: 48px; padding: 16px 30px; border-radius: 14px; border: 1px solid rgba(255,209,0,0.45); background: rgba(255,209,0,0.08); font-family: var(--font-display); font-weight: 700; font-size: 34px; color: var(--gold); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="37" data-width="1920" data-height="1080">
+      <div class="grid"></div>
+      <!-- Soundtrack: "Carry Me Home" (130 BPM). Starts at 2:31.4, on the beat after the break, so the song winds down under the outro. -->
+      <audio id="music" data-start="0" data-duration="37" data-media-start="151.4" data-volume="0.6" data-fade-in="0.3" data-fade-out="2.5" src="assets/audio/carry_me_home.mp3"></audio>
+
+      <!-- S1: intro -->
+      <section id="s1" class="clip" data-start="0" data-duration="4" data-track-index="0">
+        <div class="center">
+          <img class="logo" src="assets/bsa-logo.jpeg" alt="" />
+          <div class="kicker org">Bruin Sports Analytics · UCLA</div>
+          <div class="title">NBA What If<span class="dot">.</span></div>
+          <div class="tag">Basketball, reconsidered.</div>
+        </div>
+      </section>
+
+      <!-- S2: pick a game -->
+      <section id="s2" class="clip" data-start="4" data-duration="5" data-track-index="0">
+        <div class="caption">
+          <div class="kicker">Step 1 · Pick a game</div>
+          <div class="headline">Any game.<br />Every play.</div>
+          <div class="sub">Browse six seasons of NBA play-by-play with closing pregame spreads built in.</div>
+        </div>
+        <div class="stat">
+          <div><div class="num">6</div><div class="lbl">SEASONS</div></div>
+          <div><div class="num">1,230</div><div class="lbl">GAMES / SEASON</div></div>
+          <div><div class="num">467</div><div class="lbl">PLAYS IN THIS ONE</div></div>
+        </div>
+        <div class="frame" data-layout-allow-overflow><img src="assets/02-game.png" alt="" /></div>
+      </section>
+
+      <!-- S3: full game win probability -->
+      <section id="s3" class="clip" data-start="9" data-duration="7" data-track-index="0">
+        <div class="caption" style="width: 1200px">
+          <div class="kicker">Step 2 · Read the game</div>
+          <div class="headline">Rockets 117, Warriors 116.</div>
+          <div class="sub">A neural-network win-probability model scores every possession.</div>
+        </div>
+        <div class="legend"><span><i style="background: var(--blue)"></i>Warriors win probability</span></div>
+        <svg class="chart" viewBox="0 0 1640 460">
+          <line class="gl" x1="0" x2="1640" y1="0" y2="0" /><line class="gl" x1="0" x2="1640" y1="460" y2="460" />
+          <line class="half" x1="0" x2="1640" y1="230" y2="230" />
+          <text class="ax" x="-16" y="8" text-anchor="end">100%</text>
+          <text class="ax" x="-16" y="238" text-anchor="end">50%</text>
+          <text class="ax" x="-16" y="468" text-anchor="end">0%</text>
+          <text class="ax" x="0" y="500">Q1</text><text class="ax" x="410" y="500">Q2</text><text class="ax" x="820" y="500">Q3</text><text class="ax" x="1230" y="500">Q4</text><text class="ax" x="1640" y="500" text-anchor="end">End</text>
+          <path id="full" class="orig" d="M0.0,285.2H0.0V285.2H2.3V280.6H8.0V262.2H23.3V266.8H25.1V262.2H34.7V239.2H46.7V248.4H47.8V239.2H53.0V211.6H60.4V239.2H66.6V230.0H66.6V239.2H69.5V257.6H76.9V248.4H78.0V257.6H84.8V276.0H94.5V239.2H102.5V243.8H102.5V239.2H107.1V239.2H109.3V239.2H113.3V207.0H115.0V216.2H115.0V207.0H115.0V207.0H122.4V243.8H135.5V207.0H146.9V234.6H154.9V239.2H154.9V230.0H154.9V230.0H161.2V211.6H168.6V239.2H175.4V230.0H176.5V239.2H178.2V230.0H178.2V239.2H178.2V239.2H185.1V257.6H197.0V248.4H198.7V253.0H205.6V253.0H206.7V248.4H211.3V248.4H211.3V253.0H213.5V253.0H217.0V253.0H218.7V253.0H220.9V253.0H220.9V248.4H232.3V230.0H242.0V253.0H242.6V248.4H242.6V248.4H242.6V248.4H242.6V253.0H248.3V253.0H252.8V225.4H259.1V234.6H260.2V225.4H263.7V225.4H269.9V225.4H269.9V239.2H269.9V234.6H269.9V225.4H269.9V234.6H269.9V248.4H281.3V234.6H281.3V243.8H282.4V243.8H284.7V243.8H285.3V243.8H285.9V262.2H293.3V253.0H301.8V262.2H302.4V253.0H312.1V234.6H312.1V248.4H312.1V239.2H312.1V239.2H312.1V248.4H312.1V234.6H320.0V257.6H326.3V248.4H328.6V253.0H332.0V271.4H345.1V266.8H345.1V266.8H354.2V266.8H354.2V271.4H355.9V271.4H356.5V271.4H356.5V266.8H366.2V266.8H367.3V266.8H369.0V234.6H377.5V248.4H377.5V248.4H390.6V211.6H395.2V239.2H407.7V230.0H408.9V239.2H410.0V239.2H410.0V239.2H410.0V239.2H410.0V230.0H423.1V230.0H424.8V230.0H427.1V253.0H439.0V243.8H440.2V253.0H445.9V285.2H458.4V276.0H459.5V280.6H463.0V312.8H477.2V303.6H477.2V303.6H484.6V312.8H485.7V312.8H486.3V335.8H486.3V335.8H486.3V335.8H495.4V331.2H495.4V331.2H495.4V322.0H505.1V335.8H517.6V331.2H517.6V331.2H517.6V326.6H517.6V326.6H517.6V322.0H524.5V322.0H526.7V317.4H530.7V317.4H533.0V322.0H535.3V322.0H535.3V317.4H542.7V317.4H542.7V322.0H544.4V317.4H544.4V317.4H544.4V317.4H552.4V312.8H552.4V312.8H552.4V312.8H557.5V312.8H557.5V312.8H557.5V308.2H557.5V299.0H557.5V294.4H560.9V294.4H560.9V289.8H562.6V289.8H564.9V294.4H575.1V294.4H577.4V289.8H582.5V280.6H593.4V280.6H595.1V280.6H603.0V262.2H604.2V271.4H604.2V262.2H604.2V262.2H604.2V271.4H604.2V271.4H613.3V266.8H615.6V266.8H619.0V266.8H621.8V266.8H625.2V266.8H626.4V266.8H626.4V257.6H630.9V266.8H633.8V257.6H636.1V257.6H636.1V266.8H638.3V257.6H638.3V271.4H638.3V276.0H638.3V271.4H644.0V243.8H655.4V253.0H655.4V243.8H655.4V243.8H655.4V253.0H660.0V248.4H660.0V248.4H666.2V225.4H674.2V225.4H674.2V225.4H678.8V253.0H685.6V248.4H685.6V253.0H687.9V266.8H695.9V262.2H697.6V271.4H703.3V294.4H715.2V285.2H716.9V299.0H720.9V322.0H721.5V308.2H721.5V308.2H721.5V322.0H721.5V308.2H733.4V289.8H740.3V322.0H749.4V312.8H751.1V322.0H761.9V326.6H763.6V317.4H769.3V317.4H770.5V326.6H776.2V326.6H777.9V317.4H777.9V326.6H784.7V299.0H795.5V331.2H800.6V322.0H801.2V331.2H801.2V322.0H801.2V322.0H809.8V335.8H809.8V326.6H811.5V303.6H816.6V312.8H816.6V303.6H816.6V312.8H820.0V303.6H820.0V303.6H820.0V312.8H820.0V299.0H828.0V326.6H828.0V326.6H828.0V340.4H834.8V312.8H834.8V322.0H834.8V312.8H838.8V308.2H843.3V326.6H851.9V326.6H853.6V326.6H859.3V345.0H869.0V326.6H881.5V331.2H883.8V326.6H886.1V308.2H893.5V308.2H893.5V308.2H896.3V331.2H904.8V331.2H906.0V335.8H910.5V363.4H916.8V354.2H922.5V358.8H925.9V368.0H927.6V358.8H931.0V358.8H932.8V358.8H933.9V358.8H933.9V368.0H935.0V354.2H935.0V363.4H935.0V363.4H935.0V354.2H935.0V354.2H935.0V354.2H935.0V354.2H935.0V372.6H941.3V363.4H952.1V395.6H963.5V368.0H976.6V377.2H978.3V368.0H982.3V368.0H984.0V381.8H987.4V409.4H995.4V404.8H995.4V404.8H997.7V377.2H1004.5V409.4H1010.8V404.8H1010.8V391.0H1010.8V395.6H1010.8V395.6H1010.8V404.8H1010.8V381.8H1019.9V395.6H1021.6V386.4H1024.4V391.0H1024.4V372.6H1024.4V363.4H1031.3V404.8H1042.7V395.6H1042.7V404.8H1043.8V404.8H1048.9V427.8H1056.3V404.8H1059.2V404.8H1059.2V418.6H1059.2V418.6H1059.2V423.2H1065.4V423.2H1067.1V427.8H1072.8V427.8H1072.8V423.2H1074.5V409.4H1087.1V418.6H1087.6V409.4H1087.6V409.4H1095.0V414.0H1096.2V418.6H1098.5V418.6H1098.5V414.0H1109.3V400.2H1120.7V409.4H1122.4V400.2H1127.5V409.4H1127.5V381.8H1127.5V391.0H1127.5V400.2H1127.5V400.2H1127.5V377.2H1141.2V391.0H1141.2V391.0H1152.0V358.8H1152.0V368.0H1152.0V354.2H1152.0V358.8H1153.1V368.0H1165.1V368.0H1166.8V358.8H1171.3V331.2H1184.4V363.4H1190.7V358.8H1190.7V340.4H1190.7V345.0H1190.7V345.0H1190.7V340.4H1190.7V317.4H1198.7V358.8H1198.7V349.6H1198.7V358.8H1199.8V349.6H1204.9V354.2H1204.9V354.2H1214.1V386.4H1224.3V377.2H1224.3V386.4H1224.3V377.2H1224.3V386.4H1224.3V386.4H1226.6V377.2H1226.6V386.4H1227.2V391.0H1227.2V377.2H1227.2V391.0H1227.2V386.4H1227.2V400.2H1230.0V395.6H1230.0V404.8H1230.0V418.6H1239.7V409.4H1240.8V409.4H1244.2V377.2H1254.5V391.0H1256.2V377.2H1261.3V377.2H1263.6V377.2H1263.6V349.6H1274.4V391.0H1285.2V377.2H1286.9V391.0H1290.9V381.8H1290.9V381.8H1290.9V400.2H1290.9V400.2H1290.9V409.4H1304.0V404.8H1306.9V404.8H1308.0V404.8H1308.0V414.0H1318.3V404.8H1318.3V423.2H1318.3V414.0H1322.8V423.2H1322.8V414.0H1323.4V423.2H1324.0V423.2H1324.0V414.0H1324.5V423.2H1325.7V418.6H1325.7V432.4H1325.7V423.2H1325.7V437.0H1335.3V432.4H1337.1V441.6H1345.0V441.6H1345.6V432.4H1349.0V418.6H1358.1V446.2H1363.8V418.6H1371.8V423.2H1374.6V441.6H1381.5V437.0H1381.5V441.6H1381.5V441.6H1388.9V450.8H1403.1V450.8H1403.1V441.6H1403.1V446.2H1403.1V446.2H1403.1V446.2H1403.1V446.2H1403.1V446.2H1403.1V437.0H1411.7V446.2H1413.4V441.6H1417.3V427.8H1428.2V437.0H1429.9V427.8H1433.3V395.6H1433.9V409.4H1433.9V409.4H1433.9V395.6H1440.1V400.2H1447.5V414.0H1461.8V404.8H1463.5V414.0H1474.3V437.0H1474.3V437.0H1474.3V441.6H1474.3V446.2H1481.1V437.0H1494.8V441.6H1497.1V437.0H1502.2V409.4H1518.1V423.2H1518.1V414.0H1518.1V423.2H1530.1V418.6H1532.4V427.8H1538.6V427.8H1538.6V418.6H1548.9V340.4H1566.0V437.0H1574.5V386.4H1584.2V414.0H1585.9V395.6H1590.5V308.2H1600.7V427.8H1600.7V409.4H1600.7V441.6H1607.5V326.6H1618.4V377.2H1620.1V349.6H1621.2V354.2H1621.2V381.8H1629.2V101.2H1629.2V128.8H1630.9V110.4H1630.9V110.4H1630.9V110.4H1633.7V437.0H1638.9V460.0H1640.0V460.0H1640.0V460.0H1640.0V460.0" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+          <circle id="drop-dot" cx="1636" cy="437" r="12" fill="var(--red)" />
+        </svg>
+        <div id="c3" class="callout" style="left: 1180px; top: 890px; width: 600px">
+          <div class="t" style="color: var(--red)">Q4 0:11 · biggest swing</div>
+          <div class="b">Sengun layup: 76% → 5%</div>
+          <div class="s">One basket erases the Warriors’ late lead.</div>
+        </div>
+      </section>
+
+      <!-- S4: flip the play -->
+      <section id="s4" class="clip" data-start="16" data-duration="7" data-track-index="0">
+        <div class="caption" style="width: 960px">
+          <div class="kicker">Step 3 · Rewrite it</div>
+          <div class="headline">What if he<br />missed?</div>
+          <div class="sub">Flip any shot from Made to Missed. The model reruns the game instantly.</div>
+        </div>
+        <div class="meter">
+          <div class="lbl" style="margin-bottom: 10px">WARRIORS WIN PROBABILITY</div>
+          <div class="row"><span class="from">5%</span><span class="big" id="counter">5%</span></div>
+          <div class="pp" id="pp">+79 pp</div>
+        </div>
+        <div class="panel">
+          <div class="frame">
+            <img id="insp-before" src="assets/c-insp-before.png" alt="" />
+            <img id="insp-after" src="assets/c-insp-after.png" alt="" />
+          </div>
+          <div class="ring" id="ring"></div>
+          <svg class="cursor" id="cursor" viewBox="0 0 24 24"><path d="M4 2 L4 20 L9 15 L12.5 22 L15.5 20.6 L12 13.8 L19 13.8 Z" fill="#fff" stroke="#0b1f38" stroke-width="1.5" stroke-linejoin="round" /></svg>
+        </div>
+      </section>
+
+      <!-- S5: zoom final two minutes -->
+      <section id="s5" class="clip" data-start="23" data-duration="6.5" data-track-index="0">
+        <div class="caption" style="width: 1000px">
+          <div class="kicker">The alternate ending</div>
+          <div class="headline">Final two minutes,<br />rewritten.</div>
+        </div>
+        <div class="final" id="final">
+          <div class="lbl">WHAT-IF FINAL</div>
+          <div class="score">GSW <em>116</em>–115</div>
+        </div>
+        <div class="legend" style="top: 330px"><span><i style="background: var(--blue)"></i>Original</span><span><i style="background: var(--gold)"></i>What if</span></div>
+        <svg class="chart" viewBox="0 0 1640 460" style="top: 420px; height: 460px">
+          <line class="gl" x1="0" x2="1640" y1="0" y2="0" /><line class="gl" x1="0" x2="1640" y1="460" y2="460" />
+          <line class="half" x1="0" x2="1640" y1="230" y2="230" />
+          <text class="ax" x="-16" y="8" text-anchor="end">100%</text>
+          <text class="ax" x="-16" y="238" text-anchor="end">50%</text>
+          <text class="ax" x="-16" y="468" text-anchor="end">0%</text>
+          <text class="ax" x="0" y="500">Q4 2:00</text><text class="ax" x="820" y="500" text-anchor="middle">1:00</text><text class="ax" x="1640" y="500" text-anchor="end">0:00</text>
+          <path id="zo" class="orig" d="M0.0,437.0H68.3V386.4H300.7V414.0H341.7V395.6H451.0V308.2H697.0V427.8H697.0V409.4H697.0V441.6H861.0V326.6H1120.7V377.2H1161.7V349.6H1189.0V354.2H1189.0V381.8H1380.3V101.2H1380.3V128.8H1421.3V110.4H1421.3V110.4H1421.3V110.4H1489.7V437.0H1612.7V460.0H1640.0V460.0H1640.0V460.0H1640.0V460.0" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+          <path id="zw" class="wif" d="M1489.7,110.4V73.6H1612.7V9.2H1640.0V0.0" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+          <circle id="z-fork" cx="1489.7" cy="110.4" r="10" fill="var(--ink)" />
+          <circle id="z-end" cx="1640" cy="0" r="12" fill="var(--gold)" />
+        </svg>
+      </section>
+
+      <!-- S6: clutch index -->
+      <section id="s6" class="clip" data-start="29.5" data-duration="4" data-track-index="0">
+        <div class="caption" style="width: 700px">
+          <div class="kicker">Plus · Clutch Index</div>
+          <div class="headline">Who delivers when it matters?</div>
+          <div class="sub">Rank players by the win probability they add in crunch time.</div>
+          <div class="callout" id="c6" style="position: relative; margin-top: 48px; display: inline-block">
+            <div class="t" style="color: var(--green)">2025-26 Warriors leader</div>
+            <div class="b">Stephen Curry · +731%</div>
+            <div class="s">71 crunch plays across 16 games</div>
+          </div>
+        </div>
+        <div class="frame"><img data-layout-allow-overflow src="assets/06b-clutch-full.png" alt="" /><div class="hl" id="hl6" style="top: 114px"></div></div>
+      </section>
+
+      <!-- S7: outro -->
+      <section id="s7" class="clip" data-start="33.5" data-duration="3.5" data-track-index="0">
+        <div class="center">
+          <img class="logo" src="assets/bsa-logo.jpeg" alt="" />
+          <div class="title">NBA What If<span class="dot">.</span></div>
+          <div class="feat">Play Editor · Game Comparison · Clutch Index · Kalshi Markets</div>
+          <div class="url">github.com/sk2007/nba-what-if</div>
+        </div>
+      </section>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const ease = "power3.out";
+
+      // S1 intro
+      tl.fromTo("#s1 .center", { scale: 1.04 }, { scale: 1, duration: 3.5, ease: "sine.out" }, 0)
+        .from("#s1 .tag", { y: 20, opacity: 0, duration: 0.5, ease }, 0.4)
+        .to("#s1 .center", { opacity: 0, scale: 0.96, duration: 0.4, ease: "power2.in" }, 3.55);
+
+      // S2 game
+      tl.from("#s2 .caption > *", { y: 30, opacity: 0, duration: 0.6, stagger: 0.12, ease }, 4.1)
+        .from("#s2 .stat > *", { y: 30, opacity: 0, duration: 0.5, stagger: 0.1, ease }, 4.6)
+        .from("#s2 .frame", { x: 300, opacity: 0, rotationY: -12, duration: 0.9, ease }, 4.2)
+        .to("#s2 .frame", { x: -60, scale: 1.08, transformOrigin: "30% 30%", duration: 3.5, ease: "sine.inOut" }, 5.1)
+        .to("#s2 > *", { opacity: 0, duration: 0.4, ease: "power2.in" }, 8.55);
+
+      // S3 full game curve
+      tl.from("#s3 .caption > *", { y: 30, opacity: 0, duration: 0.6, stagger: 0.12, ease }, 9.1)
+        .from("#s3 .legend, #s3 .chart .ax, #s3 .chart line", { opacity: 0, duration: 0.5 }, 9.3)
+        .to("#full", { strokeDashoffset: 0, duration: 3.2, ease: "power1.inOut" }, 9.6)
+        .from("#drop-dot", { scale: 0, transformOrigin: "50% 50%", opacity: 0, duration: 0.4, ease: "back.out(2)" }, 12.8)
+        .to("#drop-dot", { scale: 1.6, opacity: 0.6, transformOrigin: "50% 50%", duration: 0.5, yoyo: true, repeat: 3, ease: "sine.inOut" }, 13.2)
+        .from("#c3", { y: 30, opacity: 0, duration: 0.6, ease }, 13.0)
+        .to("#s3 > *", { opacity: 0, duration: 0.4, ease: "power2.in" }, 15.55);
+
+      // S4 flip: Missed button center sits at (250, 320) in the 350px-wide panel image
+      tl.from("#s4 .caption > *", { y: 30, opacity: 0, duration: 0.6, stagger: 0.12, ease }, 16.1)
+        .from("#s4 .panel", { x: 200, opacity: 0, duration: 0.8, ease }, 16.2)
+        .set("#insp-after", { opacity: 0 }, 16)
+        .set("#ring", { left: 205, top: 275, scale: 0.4, opacity: 0 }, 16)
+        .fromTo("#cursor", { x: 420, y: 760, opacity: 0 }, { x: 243, y: 316, opacity: 1, duration: 1.3, ease: "power2.inOut" }, 17.0)
+        .to("#cursor", { scale: 0.82, duration: 0.1, transformOrigin: "10% 10%" }, 18.35)
+        .to("#cursor", { scale: 1, duration: 0.15 }, 18.45)
+        .to("#ring", { scale: 1.3, opacity: 1, duration: 0.2, ease: "power2.out" }, 18.4)
+        .to("#ring", { scale: 1.8, opacity: 0, duration: 0.5, ease: "power2.out" }, 18.6)
+        .to("#insp-after", { opacity: 1, duration: 0.25 }, 18.45)
+        .from("#s4 .meter", { y: 30, opacity: 0, duration: 0.5, ease }, 18.6);
+      const counter = { v: 5 };
+      tl.to(counter, { v: 84, duration: 1.4, ease: "power2.out", onUpdate: () => {
+          document.getElementById("counter").textContent = Math.round(counter.v) + "%";
+        } }, 18.8)
+        .from("#pp", { scale: 0.6, opacity: 0, duration: 0.5, ease: "back.out(2)" }, 20.1)
+        .to("#cursor", { opacity: 0, duration: 0.3 }, 20.0)
+        .to("#s4 > *", { opacity: 0, duration: 0.4, ease: "power2.in" }, 22.55);
+
+      // S5 zoomed ending
+      tl.from("#s5 .caption > *", { y: 30, opacity: 0, duration: 0.6, stagger: 0.12, ease }, 23.1)
+        .from("#s5 .legend, #s5 .chart .ax, #s5 .chart line", { opacity: 0, duration: 0.5 }, 23.3)
+        .to("#zo", { strokeDashoffset: 0, duration: 2.0, ease: "power1.inOut" }, 23.6)
+        .from("#z-fork", { scale: 0, opacity: 0, transformOrigin: "50% 50%", duration: 0.4, ease: "back.out(2)" }, 25.7)
+        .to("#zw", { strokeDashoffset: 0, duration: 1.6, ease: "power2.inOut" }, 26.0)
+        .from("#z-end", { scale: 0, opacity: 0, transformOrigin: "50% 50%", duration: 0.4, ease: "back.out(2)" }, 27.6)
+        .from("#final", { x: 40, opacity: 0, duration: 0.6, ease }, 27.6)
+        .to("#s5 > *", { opacity: 0, duration: 0.4, ease: "power2.in" }, 29.05);
+
+      // S6 clutch
+      tl.from("#s6 .caption > *", { y: 30, opacity: 0, duration: 0.6, stagger: 0.12, ease }, 29.6)
+        .from("#s6 .frame", { x: 300, opacity: 0, duration: 0.8, ease }, 29.7)
+        .from("#hl6", { scaleX: 0.2, opacity: 0, duration: 0.5, ease }, 30.7)
+        .to("#s6 .frame", { scale: 1.06, transformOrigin: "40% 20%", duration: 3, ease: "sine.inOut" }, 30.3)
+        .to("#s6 > *", { opacity: 0, duration: 0.4, ease: "power2.in" }, 33.05);
+
+      // S7 outro
+      tl.from("#s7 .logo", { scale: 0.6, opacity: 0, duration: 0.6, ease: "back.out(1.6)" }, 33.6)
+        .from("#s7 .title", { y: 30, opacity: 0, duration: 0.6, ease }, 33.8)
+        .from("#s7 .feat", { y: 20, opacity: 0, duration: 0.5, ease }, 34.1)
+        .from("#s7 .url", { y: 20, opacity: 0, duration: 0.5, ease }, 34.35);
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
