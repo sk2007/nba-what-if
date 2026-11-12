@@ -27,17 +27,34 @@ Normalized `eventNum` values are unique within a game so editing one play
 cannot edit another. `sourceEventNum` preserves the source's identifier.
 Synthetic period records are retained; record counts include them.
 
-Historical betting spreads are not supplied by this archive. Downloaded games
-use the model's neutral `bettingLine: 0`; these predictions do not include
-historical sportsbook spreads. Play-by-play does not include complete box
-scores, so the separate box-score endpoint still requires NBA access.
+`betting_lines_2025-26.json` supplies exact, offline **closing pregame
+spreads for all 1,315 games**. Negative means the home team was favored;
+the away spread is its sign-reversed counterpart. The original and what-if
+models both receive the home spread. Zero is a real pick'em, while an absent
+spread is `null` in the API and visibly marked unavailable.
+
+[RotoWire's archive](https://www.rotowire.com/betting/nba/archive.php)
+provides 1,289 lines, matched on date, home/away teams, and final scores.
+The remaining 26 use the
+[archived ESPN betting-lines dataset](https://basketball-data.billmill.org/nba/espn/betting_lines/season=2026/data.parquet)
+maintained by [llimllib/nba_data](https://github.com/llimllib/nba_data):
+10 DraftKings lines and 16 ESPN BET lines, matched on NBA game ID and both
+NBA team IDs. These are closing spreads, not opening spreads. Per-game
+sources, retrieval timestamp, and SHA-256 hashes are stored in the JSON cache.
+A dated lookup never borrows a line from another game or season.
+
+The underlying play archive itself does not supply betting spreads; the line
+cache overlays that field when a game is loaded, before computing its curve.
+Play-by-play does not include complete box scores, so the separate box-score
+endpoint still requires NBA access.
 
 To rebuild (from the project root, with the server environment activated):
 
 ```bash
 python3 -m pip install pyarrow
 python3 -m server.download_season --season 2025-26
+python3 -m server.seed_betting_lines --season 2025-26
 ```
 
-Only this one-time download needs pyarrow. The database and JSON lists are
+Only these one-time downloads need pyarrow. Restart the server after rebuilding caches. The database and JSON lists are
 included in Vercel's existing `server/**` deployment bundle.

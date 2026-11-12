@@ -1,9 +1,15 @@
 from datetime import datetime
+from functools import lru_cache
+import json
+import math
+from pathlib import Path
+import re
 
 import requests
 
 
 _ROTOWIRE_URL = "https://www.rotowire.com/betting/nba/tables/games-archive.php"
+_CACHE_DIR = Path(__file__).resolve().parent / "cache"
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -68,6 +74,10 @@ def get_pregame_line(home_team, away_team, game_date=None):
         line = index.get((date_key, home_abbrev, away_abbrev))
         if line is not None:
             return line
+        # A historical game must never inherit another season's matchup line.
+        return 0
+    if game_date is not None:
+        return 0
 
     # Fallback for callers that cannot resolve a date: use the latest matching
     # matchup. This is less precise, so dated lookups should be preferred.
@@ -75,6 +85,31 @@ def get_pregame_line(home_team, away_team, game_date=None):
         if row_home == home_abbrev and row_away == away_abbrev:
             return line
     return 0
+
+
+@lru_cache(maxsize=16)
+def _read_line_cache(path):
+    with path.open(encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def get_cached_pregame_line(game_id, home_team, away_team, game_date):
+    """Return an exact, offline closing-spread record; None means unavailable."""
+    if not re.fullmatch(r"00[24]\d{7}", game_id):
+        return None
+    year = 2000 + int(game_id[3:5])
+    path = _CACHE_DIR / f"betting_lines_{year}-{str(year + 1)[-2:]}.json"
+    if not path.exists():
+        return None
+    cache = _read_line_cache(path)
+    row = cache["games"].get(game_id)
+    if row is None or (row["homeTeam"], row["awayTeam"], row["date"]) != (home_team, away_team, _date_key(game_date)):
+        return None
+    line = row.get("homeSpread")
+    if isinstance(line, bool) or not isinstance(line, (int, float)) or not math.isfinite(line):
+        return None
+    source = cache["sources"][row["source"]]
+    return {"line": line, "type": "closing", "source": source["label"], "sourceUrl": source["url"]}
 
 
 def _get_lines():

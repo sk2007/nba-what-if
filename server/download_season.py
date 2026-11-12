@@ -2,6 +2,7 @@
 
 Run from the project root after installing the download-only dependency pyarrow:
     python3 -m server.download_season --season 2025-26
+    python3 -m server.seed_betting_lines --season 2025-26
 
 Runtime reads compressed SQLite using Python's standard library; pyarrow is not
 needed by Flask or Vercel. nba_api remains the client for live/uncached games.

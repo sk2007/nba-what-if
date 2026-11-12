@@ -928,3 +928,20 @@
     transition: none !important;
   }
 }
+
+.studio-pregame-spread {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 18px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--surface-soft);
+  border-left: 2px solid var(--gold);
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.studio-pregame-spread .studio-eyebrow { margin: 0; }
+.studio-pregame-spread strong { color: var(--text-primary); font-variant-numeric: tabular-nums; margin-left: 4px; }
+.studio-pregame-spread a { color: var(--electric-blue); font-size: 11px; text-underline-offset: 3px; }

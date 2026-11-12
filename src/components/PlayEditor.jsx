@@ -340,6 +340,10 @@ function formatSignedNumber(value, suffix = '') {
   return `${rounded > 0 ? '+' : ''}${rounded}${suffix}`;
 }
 
+function formatSpread(value) {
+  return value === 0 ? 'PK' : `${value > 0 ? '+' : ''}${value}`;
+}
+
 function formatScore(point, teamA, teamB) {
   return `${teamA} ${point?.scoreA ?? 0} - ${point?.scoreB ?? 0} ${teamB}`;
 }
@@ -878,6 +882,8 @@ export default function PlayEditor({ season, seasonType, seasonControls }) {
     setSelectedEventNums(new Set());
   }
 
+  const hasBettingLine = Number.isFinite(game?.bettingLine);
+
   const inspector = (
     <div className="scenario-inspector-content">
       <div className="studio-section-heading">
@@ -994,7 +1000,7 @@ export default function PlayEditor({ season, seasonType, seasonControls }) {
         What-if results estimate changes to this game. Later events stay as
         recorded unless you edit them.
         {game?.dataSource && (
-          <p>Downloaded play archive · Historical betting spreads are unavailable, so the model uses a neutral spread.</p>
+          <p>Downloaded play archive · {hasBettingLine ? 'The model includes the closing pregame spread.' : 'Historical spread unavailable; the model uses a neutral spread.'}</p>
         )}
       </div>
     </div>
@@ -1101,6 +1107,14 @@ export default function PlayEditor({ season, seasonType, seasonControls }) {
                   <span className="studio-team-location">Home</span>
                   <h2>{game.teamA}</h2>
                 </div>
+              </div>
+              <div className="studio-pregame-spread" aria-label="Pregame closing point spread">
+                <span className="studio-eyebrow">Pregame spread · Closing</span>
+                {hasBettingLine ? <>
+                  <span>{game.teamB} <strong>{formatSpread(-game.bettingLine)}</strong></span>
+                  <span>{game.teamA} <strong>{formatSpread(game.bettingLine)}</strong></span>
+                  {game.bettingLineSource && <a href={game.bettingLineSourceUrl} target="_blank" rel="noreferrer">{game.bettingLineSource}</a>}
+                </> : <span className="studio-muted">Unavailable · Model uses a neutral spread</span>}
               </div>
               <div className="studio-score-footer">
                 <label className="studio-perspective">

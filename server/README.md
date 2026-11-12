@@ -32,6 +32,7 @@ Server starts on http://localhost:5001.
 
 - `2025-26` includes downloaded lists and plays for all 1,230 regular-season and 85 playoff games. Historical plays load from `cache/pbp_2025-26.sqlite3` without a network request, and win probability is calculated locally.
 - To repeat the season download, install the download-only dependency `pyarrow`, then run `python3 -m server.download_season --season 2025-26`. Flask/Vercel do not need pyarrow. See [cache/README.md](cache/README.md) for sources and limitations.
+- Pregame closing spreads are cached for all 1,315 games and included in original and what-if predictions. Refresh them with `python3 -m server.seed_betting_lines --season 2025-26`; the UI shows both teams’ signed spreads and their source.
 - Live/uncached games continue to use `nba_api`, with the existing Basketball-Reference fallback. The older `server.seed_cache` script fetches game lists directly through `nba_api`.
 - nba_api responses are cached in memory for the process lifetime. Restart to clear.
 - nba_api rate-limits requests. If you get 503 errors, wait a few seconds and retry.

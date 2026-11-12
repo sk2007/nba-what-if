@@ -308,6 +308,13 @@ def _read_archived_play_by_play(game_id):
     if row is None:
         return None
     game = json.loads(zlib.decompress(row[0]))
+    from server.betting_lines import get_cached_pregame_line
+    spread = get_cached_pregame_line(game_id, game["teamA"], game["teamB"], game.get("date"))
+    # None is unknown; 0 is a genuine pick'em. Keep those states distinct in UI.
+    game["bettingLine"] = spread["line"] if spread else None
+    if spread:
+        game.update({"bettingLineType": spread["type"], "bettingLineSource": spread["source"],
+                     "bettingLineSourceUrl": spread["sourceUrl"]})
     from server.wp_mlp import compute_wp_curve
     game["wpCurve"] = compute_wp_curve(game["plays"], game["teamA"], line=game.get("bettingLine", 0))
     return game
